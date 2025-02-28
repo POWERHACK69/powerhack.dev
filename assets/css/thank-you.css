@@ -1,0 +1,63 @@
+
+body {
+    background-color: #111; /* Dark background */
+    color: #fff; /* Light text for contrast */
+    font-family: 'Poppins', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    text-align: center;
+    margin: 0;
+}
+
+.thank-you {
+    background: #1a1a1a; /* Slightly lighter dark shade for card effect */
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0px 8px 24px rgba(255, 255, 255, 0.1);
+    max-width: 500px;
+}
+
+.h3 {
+    font-size: 48px;
+    font-weight: 600;
+    color: #FFD700; /* Gold highlight */
+    margin-bottom: 10px;
+}
+
+p {
+    font-size: 22px;
+    line-height: 1.6;
+    opacity: 0.9;
+    margin-bottom: 15px;
+}
+
+.p1 {
+    font-size: 14px;
+    line-height: 1.6;
+    opacity: 0.9;
+    margin-bottom: 15px;
+}
+
+.thank-you-img {
+    width: 80%;
+    max-width: 250px;
+    margin: 20px auto;
+    filter: drop-shadow(0px 4px 10px rgba(255, 215, 0, 0.2)); /* Soft gold glow */
+}
+
+.btn {
+    display: inline-block;
+    background: #FFD700; /* Gold button */
+    color: #000;
+    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background 0.3s ease;
+}
+
+.btn:hover {
+    background: #e6c300;
+}
