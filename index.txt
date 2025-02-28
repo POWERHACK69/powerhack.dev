@@ -2,23 +2,23 @@ vCard - Personal Portfolio
 
 # sidebar
 
-alt = Richard hanrick
-Richard hanrick
-Web developer
+alt = POWERHACK
+Gregory-Michael Azubuike
+Game Developer, Game Consultant, Project Manager, Software Developer
 
 Show Contacts
 
 Email
-richard@example.com
+gregorymike.azubuike@gmail.com
 
 Phone
 +1 (213) 352-2795
 
 Birthday
-June 23, 1982
+June 1
 
 Location
-Sacramento, California, USA
+FCT, Abuja, Nigeria
 
 # navbar
 
