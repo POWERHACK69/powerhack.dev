@@ -831,10 +831,10 @@ main {
 
 
 /**
- * skills bar, old code 
+ * skills 
  */
 
-/* .skills-title { margin-bottom: 20px; }
+.skills-title { margin-bottom: 20px; }
 
 .skills-list { padding: 20px; }
 
@@ -865,114 +865,9 @@ main {
   background: var(--text-gradient-yellow);
   height: 100%;
   border-radius: inherit;
-} */
-
-
-/* CSS for the skills pentagon with explanation box */
-.skills-section {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
 }
 
-.skills-pentagon-container {
-  position: relative;
-  width: 500px;
-  height: 500px;
-  margin-bottom: 40px;
-}
 
-.skill-labels {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-}
-
-.skill-label {
-  position: absolute;
-  font-weight: bold;
-  text-align: center;
-  width: 150px;
-  color: white;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.skill-label:hover {
-  color: #FFD700;
-}
-
-.skill-percentage {
-  display: block;
-  font-size: 1.2rem;
-  color: #FFD700;
-  margin-top: 5px;
-}
-
-.skill-explanation {
-  position: absolute;
-  background-color: rgba(40, 40, 40, 0.95);
-  border: 2px solid #FFD700;
-  border-radius: 8px;
-  padding: 15px;
-  width: 300px;
-  color: white;
-  font-size: 0.9rem;
-  line-height: 1.4;
-  z-index: 10;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s, visibility 0.3s;
-}
-
-.skill-explanation.visible {
-  opacity: 1;
-  visibility: visible;
-}
-
-.skill-explanation-title {
-  color: #FFD700;
-  font-weight: bold;
-  margin-bottom: 8px;
-  font-size: 1rem;
-}
-
-.skills-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: white;
-}
-
-.legend-color {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-}
-
-.skills-fill {
-  background-color: rgba(255, 215, 0, 0.7);
-}
-
-.skills-background {
-  background-color: rgba(255, 215, 0, 0.2);
-}
-
-/* Hide the skills data element */
-.skills-data {
-  display: none;
-}
 
 
 
