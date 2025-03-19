@@ -7,7 +7,7 @@
         
 
         {
-            "type": "chrome",
+            "type": "firefox",
             "request": "launch",
             "name": "Open index.html",
             "file": "c:\\Users\\stron\\OneDrive\\Documents\\GitHub\\personal-portfolio\\index.html"

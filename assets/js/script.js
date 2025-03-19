@@ -160,7 +160,7 @@ for (let i = 0; i < navigationLinks.length; i++) {
 }
 
 
-// JavaScript class that reads skills from HTML// JavaScript class with explanation functionality
+// JavaScript class with responsiveness functionality
 class SkillsPentagon {
   constructor(canvasId, labelsId, dataElementId, explanationId) {
     this.canvas = document.getElementById(canvasId);
@@ -170,11 +170,17 @@ class SkillsPentagon {
     
     // Get skills from the data element
     const dataElement = document.getElementById(dataElementId);
-    this.skills = JSON.parse(dataElement.dataset.skills|| '[]');
+    this.skills = JSON.parse(dataElement.dataset.skills || '[]');
     
-    this.centerX = this.canvas.width / 2;
-    this.centerY = this.canvas.height / 2;
-    this.radius = Math.min(this.centerX, this.centerY) * 0.8;
+    // Setup resize observer for canvas
+    this.resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        this.resizeCanvas(entry.contentRect);
+      }
+    });
+    
+    // Initialize responsive canvas
+    this.resizeObserver.observe(this.canvas.parentElement);
     
     // Track active skill explanation
     this.activeSkill = null;
@@ -183,10 +189,38 @@ class SkillsPentagon {
   }
   
   init() {
+    this.setupEventListeners();
+  }
+  
+  resizeCanvas(rect) {
+    // Clear previous content
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Update canvas size
+    this.canvas.width = rect.width;
+    this.canvas.height = rect.height;
+    
+    // Update center and radius
+    this.centerX = this.canvas.width / 2;
+    this.centerY = this.canvas.height / 2;
+    this.radius = Math.min(this.centerX, this.centerY) * 0.8;
+    
+    // Clear and redraw everything
+    this.clearLabels();
     this.drawPentagonGrid();
     this.drawSkillsPentagon();
     this.addSkillLabels();
-    this.setupEventListeners();
+    
+    // Hide explanation box when resizing
+    this.explanationBox.classList.remove('visible');
+    this.activeSkill = null;
+  }
+  
+  clearLabels() {
+    // Remove all existing labels
+    while (this.labelsContainer.firstChild) {
+      this.labelsContainer.removeChild(this.labelsContainer.firstChild);
+    }
   }
   
   drawPentagonGrid() {
@@ -258,9 +292,12 @@ class SkillsPentagon {
   }
   
   addSkillLabels() {
+    const isMobile = window.innerWidth <= 480;
+    const labelScaleFactor = isMobile ? 0.9 : 1.15;
+    
     this.skills.forEach((skill, index) => {
       const angle = (Math.PI * 2 * index / this.skills.length) - Math.PI / 2;
-      const labelDistance = this.radius * 1.15;
+      const labelDistance = this.radius * labelScaleFactor;
       const x = this.centerX + labelDistance * Math.cos(angle);
       const y = this.centerY + labelDistance * Math.sin(angle);
       
@@ -269,8 +306,11 @@ class SkillsPentagon {
       label.innerHTML = `${skill.name}<span class="skill-percentage">${skill.value}%</span>`;
       label.dataset.skillIndex = index;
       
+      // Calculate offset based on label width
+      const labelWidth = isMobile ? 100 : 120;
+      
       // Position the label
-      label.style.left = `${x - 75}px`;
+      label.style.left = `${x - labelWidth/2}px`;
       label.style.top = `${y - 20}px`;
       
       this.labelsContainer.appendChild(label);
@@ -290,37 +330,49 @@ class SkillsPentagon {
       const labelRect = skillLabel.getBoundingClientRect();
       const containerRect = this.labelsContainer.getBoundingClientRect();
       
-      // Calculate position based on which side of the pentagon the label is on
-      const angle = (Math.PI * 2 * skillIndex / this.skills.length) - Math.PI / 2;
-      let left, top;
-      
-      // Position differently based on which part of the pentagon the skill is on
-      if (angle >= -Math.PI/2 && angle < 0) {
-        // Top right
-        left = labelRect.left - containerRect.left + 160;
-        top = labelRect.top - containerRect.top;
-      } else if (angle >= 0 && angle < Math.PI/2) {
-        // Bottom right
-        left = labelRect.left - containerRect.left + 160;
-        top = labelRect.top - containerRect.top - 50;
-      } else if (angle >= Math.PI/2 && angle < Math.PI) {
-        // Bottom left
-        left = labelRect.left - containerRect.left - 260;
-        top = labelRect.top - containerRect.top - 50;
+      // Position differently based on screen size
+      const isMobile = window.innerWidth <= 480;
+      if (isMobile) {
+        // For mobile, position at bottom of container
+        this.explanationBox.style.left = '50%';
+        this.explanationBox.style.top = 'auto';
+        this.explanationBox.style.bottom = '-200px';
       } else {
-        // Top left
-        left = labelRect.left - containerRect.left - 260;
-        top = labelRect.top - containerRect.top;
+        // Calculate position based on which side of the pentagon the label is on
+        const angle = (Math.PI * 2 * skillIndex / this.skills.length) - Math.PI / 2;
+        let left, top;
+        
+        // Position differently based on which part of the pentagon the skill is on
+        if (angle >= -Math.PI/2 && angle < 0) {
+          // Top right
+          left = labelRect.left - containerRect.left + 160;
+          top = labelRect.top - containerRect.top;
+        } else if (angle >= 0 && angle < Math.PI/2) {
+          // Bottom right
+          left = labelRect.left - containerRect.left + 160;
+          top = labelRect.top - containerRect.top - 50;
+        } else if (angle >= Math.PI/2 && angle < Math.PI) {
+          // Bottom left
+          left = labelRect.left - containerRect.left - 260;
+          top = labelRect.top - containerRect.top - 50;
+        } else {
+          // Top left
+          left = labelRect.left - containerRect.left - 260;
+          top = labelRect.top - containerRect.top;
+        }
+        
+        // Ensure explanation stays within container bounds
+        left = Math.max(20, Math.min(containerRect.width - 320, left));
+        
+        this.explanationBox.style.left = `${left}px`;
+        this.explanationBox.style.top = `${top}px`;
       }
       
-      // Set content and position
+      // Set content
       this.explanationBox.innerHTML = `
         <div class="skill-explanation-title">${skill.name}</div>
         <div>${skill.description}</div>
       `;
-      
-      this.explanationBox.style.left = `${left}px`;
-      this.explanationBox.style.top = `${top}px`;
       
       // Toggle visibility
       if (this.activeSkill === skillIndex) {
@@ -338,6 +390,13 @@ class SkillsPentagon {
         this.explanationBox.classList.remove('visible');
         this.activeSkill = null;
       }
+    });
+    
+    // Also handle window resize events
+    window.addEventListener('resize', () => {
+      // Hide explanation box when resizing
+      this.explanationBox.classList.remove('visible');
+      this.activeSkill = null;
     });
   }
 }
