@@ -874,15 +874,12 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .skills-pentagon-container {
   position: relative;
-  width: 100%;
-  max-width: 500px;
-  height: auto;
+  width: 500px;
+  height: 500px;
   margin-bottom: 40px;
 }
 
@@ -892,17 +889,16 @@ main {
   height: 100%;
   top: 0;
   left: 0;
-  pointer-events: none;
 }
 
 .skill-label {
   position: absolute;
   font-weight: bold;
   text-align: center;
+  width: 150px;
   color: white;
   cursor: pointer;
   transition: color 0.2s ease;
-  pointer-events: auto;
 }
 
 .skill-label:hover {
@@ -911,7 +907,7 @@ main {
 
 .skill-percentage {
   display: block;
-  font-size: 1em;
+  font-size: 1.2rem;
   color: #FFD700;
   margin-top: 5px;
 }
@@ -922,6 +918,7 @@ main {
   border: 2px solid #FFD700;
   border-radius: 8px;
   padding: 15px;
+  width: 300px;
   color: white;
   font-size: 0.9rem;
   line-height: 1.4;
@@ -930,8 +927,6 @@ main {
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s, visibility 0.3s;
-  max-width: 100%;
-  box-sizing: border-box;
 }
 
 .skill-explanation.visible {
@@ -951,8 +946,6 @@ main {
   flex-direction: column;
   gap: 10px;
   margin-top: 20px;
-  width: 100%;
-  max-width: 300px;
 }
 
 .legend-item {
@@ -981,35 +974,6 @@ main {
   display: none;
 }
 
-/* Media queries for responsive design */
-@media (max-width: 768px) {
-  .skills-pentagon-container {
-    margin-bottom: 120px; /* Add space for explanation box below on mobile */
-  }
-  
-  .skill-label {
-    font-size: 12px;
-  }
-  
-  .skill-percentage {
-    font-size: 0.9em;
-  }
-}
-
-@media (max-width: 480px) {
-  .skills-section {
-    padding: 10px;
-  }
-  
-  .skill-explanation {
-    font-size: 0.8rem;
-    padding: 10px;
-  }
-  
-  .skill-explanation-title {
-    font-size: 0.9rem;
-  }
-}
 
 
 /*-----------------------------------*\
