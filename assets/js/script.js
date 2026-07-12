@@ -135,6 +135,27 @@ for (let i = 0; i < formInputs.length; i++) {
   });
 }
 
+// handle form submission with client-side redirect
+form.addEventListener("submit", async function (e) {
+  e.preventDefault();
+
+  const data = new FormData(form);
+
+  try {
+    await fetch(form.action, {
+      method: "POST",
+      body: data,
+    });
+  } catch {
+    // proceed even if fetch fails
+  }
+
+  window.location.href = "./pages/thank-you.html";
+});
+
+  });
+}
+
 
 
 // page navigation variables
