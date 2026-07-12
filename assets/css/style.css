@@ -106,6 +106,15 @@
   --transition-1: 0.25s ease;
   --transition-2: 0.5s ease-in-out;
 
+  /**
+   * comic book
+   */
+
+  --comic-dot: radial-gradient(circle, hsla(45, 100%, 72%, 0.05) 1.5px, transparent 1.5px);
+  --comic-dot-size: 14px 14px;
+  --comic-border: 2px solid hsl(0, 0%, 18%);
+  --comic-panel-shadow: 4px 4px 0 hsla(0, 0%, 0%, 0.3);
+
 }
 
 
@@ -152,7 +161,11 @@ input, textarea {
 
 html { font-family: var(--ff-poppins); }
 
-body { background: var(--smoky-black); }
+body {
+  background: var(--smoky-black);
+  background-image: var(--comic-dot);
+  background-size: var(--comic-dot-size);
+}
 
 
 
@@ -165,17 +178,25 @@ body { background: var(--smoky-black); }
 .sidebar,
 article {
   background: var(--eerie-black-2);
-  border: 1px solid var(--jet);
+  background-image: var(--comic-dot);
+  background-size: var(--comic-dot-size);
+  border: var(--comic-border);
   border-radius: 20px;
   padding: 15px;
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--comic-panel-shadow), var(--shadow-1);
   z-index: 1;
 }
 
 .separator {
   width: 100%;
-  height: 1px;
-  background: var(--jet);
+  height: 8px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--jet) 0px,
+    var(--jet) 6px,
+    transparent 6px,
+    transparent 8px
+  );
   margin: 16px 0;
 }
 
@@ -246,10 +267,10 @@ article.active {
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 30px;
-  height: 3px;
+  width: 40px;
+  height: 4px;
   background: var(--text-gradient-yellow);
-  border-radius: 3px;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 100%, 0 100%);
 }
 
 .has-scrollbar::-webkit-scrollbar {
@@ -272,6 +293,8 @@ article.active {
 .content-card {
   position: relative;
   background: var(--border-gradient-onyx);
+  background-image: var(--comic-dot);
+  background-size: var(--comic-dot-size);
   padding: 15px;
   padding-top: 45px;
   border-radius: 14px;
@@ -329,8 +352,26 @@ main {
 }
 
 .avatar-box {
+  position: relative;
   background: var(--bg-gradient-onyx);
   border-radius: 20px;
+  border: 2px solid hsl(45, 100%, 72%, 0.15);
+  box-shadow: 4px 4px 0 hsla(0, 0%, 0%, 0.3);
+  overflow: hidden;
+  transition: box-shadow var(--transition-1), border-color var(--transition-1);
+}
+
+.avatar-box:hover {
+  border-color: hsl(45, 100%, 72%, 0.4);
+  box-shadow: 4px 4px 0 hsla(0, 0%, 0%, 0.3), 0 0 20px hsla(45, 100%, 72%, 0.15);
+}
+
+.avatar-box img {
+  transition: transform var(--transition-2);
+}
+
+.avatar-box:hover img {
+  transform: scale(1.08);
 }
 
 .info-content .name {
@@ -360,9 +401,10 @@ main {
   color: var(--orange-yellow-crayola);
   background: var(--border-gradient-onyx);
   padding: 10px;
-  box-shadow: var(--shadow-2);
+  box-shadow: 3px 3px 0 hsla(0, 0%, 0%, 0.3), var(--shadow-2);
   transition: var(--transition-1);
   z-index: 1;
+  border: 2px solid hsla(45, 100%, 72%, 0.1);
 }
 
 .info_more-btn::before {
@@ -456,11 +498,12 @@ main {
   bottom: 0;
   left: 0;
   width: 100%;
-  background: hsla(240, 1%, 17%, 0.75);
+  background: hsla(240, 1%, 17%, 0.85);
   backdrop-filter: blur(10px);
-  border: 1px solid var(--jet);
+  border: 2px solid hsl(0, 0%, 18%);
   border-radius: 12px 12px 0 0;
-  box-shadow: var(--shadow-2);
+  border-bottom: none;
+  box-shadow: 0 -4px 0 hsla(0, 0%, 0%, 0.2), var(--shadow-2);
   z-index: 5;
 }
 
@@ -482,7 +525,23 @@ main {
 .navbar-link:hover,
 .navbar-link:focus { color: var(--light-gray-70); }
 
-.navbar-link.active { color: var(--orange-yellow-crayola); }
+.navbar-link.active {
+  color: var(--orange-yellow-crayola);
+  position: relative;
+}
+
+.navbar-link.active::after {
+  content: "";
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 5px solid var(--orange-yellow-crayola);
+}
 
 
 
@@ -526,6 +585,14 @@ main {
   border-radius: 14px;
   box-shadow: var(--shadow-2);
   z-index: 1;
+  transition: border-color var(--transition-1), box-shadow var(--transition-1);
+}
+
+.service-item:hover {
+  box-shadow: 
+    0 0 0 1px hsla(45, 100%, 72%, 0.15),
+    4px 4px 0 hsla(0, 0%, 0%, 0.3),
+    var(--shadow-2);
 }
 
 .service-item::before {
@@ -813,10 +880,10 @@ main {
   position: absolute;
   top: 5px;
   left: -33px;
-  height: 6px;
-  width: 6px;
+  height: 8px;
+  width: 8px;
   background: var(--text-gradient-yellow);
-  border-radius: 50%;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
   box-shadow: 0 0 0 4px var(--jet);
 }
 
@@ -1116,6 +1183,10 @@ main {
 
 .project-item > a:hover .project-img::before { background: hsla(0, 0%, 0%, 0.5); }
 
+.project-item > a:hover .project-img {
+  box-shadow: 0 0 0 1px hsla(45, 100%, 72%, 0.2);
+}
+
 .project-item-icon-box {
   --scale: 0.8;
 
@@ -1331,9 +1402,10 @@ textarea.form-input::-webkit-resizer { display: none; }
   border-radius: 14px;
   font-size: var(--fs-6);
   text-transform: capitalize;
-  box-shadow: var(--shadow-3);
+  box-shadow: 4px 4px 0 hsla(0, 0%, 0%, 0.3), var(--shadow-3);
   z-index: 1;
   transition: var(--transition-1);
+  border: 2px solid hsla(45, 100%, 72%, 0.1);
 }
 
 .form-btn::before {
@@ -1440,8 +1512,8 @@ textarea.form-input::-webkit-resizer { display: none; }
   }
 
   .article-title::after {
-    width: 40px;
-    height: 5px;
+    width: 50px;
+    height: 6px;
   }
 
   .icon-box {
@@ -1760,7 +1832,21 @@ textarea.form-input::-webkit-resizer { display: none; }
 
   .filter-item button:hover { color: var(--light-gray-70); }
 
-  .filter-item button.active { color: var(--orange-yellow-crayola); }
+  .filter-item button.active {
+    color: var(--orange-yellow-crayola);
+    position: relative;
+  }
+
+  .filter-item button.active::after {
+    content: "";
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: var(--orange-yellow-crayola);
+    clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 100%, 0 100%);
+  }
 
   /* portfolio and blog grid */
 
@@ -1848,6 +1934,7 @@ textarea.form-input::-webkit-resizer { display: none; }
     border-radius: 0 20px;
     padding: 0 20px;
     box-shadow: none;
+    border-bottom: 2px solid hsl(0, 0%, 18%);
   }
 
   .navbar-list {
