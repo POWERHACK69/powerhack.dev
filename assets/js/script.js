@@ -153,8 +153,6 @@ form.addEventListener("submit", async function (e) {
   window.location.href = "./pages/thank-you.html";
 });
 
-  });
-}
 
 
 
