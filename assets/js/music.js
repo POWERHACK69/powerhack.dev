@@ -10,7 +10,7 @@
 (function () {
 
   const MUSIC_VOLUME = 0.34; // master level for the soundtrack, kept well under the page
-  const SFX_VOLUME = 0.9;    // interaction sounds, on their own bus beside the music
+  const SFX_VOLUME = 0.45;   // interaction sounds, on their own bus beside the music
   const FADE = 3.2;          // crossfade length in seconds
   const LOOKAHEAD = 0.3;     // schedule bars this far ahead of the playhead
   const STORAGE_KEY = 'portfolio-music';
@@ -622,13 +622,6 @@
       n.stop(t + 0.04);
     },
 
-    // keystrokes in the contact form: barely-there ticks
-    type(m) {
-      const c = m.ctx, t = c.currentTime, g = c.createGain();
-      strike(g, t, 0.12, 0.035);
-      osc(c, 'triangle', rand(1700, 2400), t, t + 0.05).connect(g).connect(m.sfxOut(rand(-0.2, 0.2), 0));
-    },
-
     // filters and dropdowns: a quick two-step blip
     select(m) {
       const c = m.ctx, t = c.currentTime, notes = m.keyNotes(), out = m.sfxOut(0, 0.15);
@@ -782,7 +775,7 @@
 
     bindSfx() {
       const finePointer = window.matchMedia('(hover: hover)').matches;
-      let lastHover = 0, lastType = 0;
+      let lastHover = 0;
 
       if (finePointer) {
         document.addEventListener('pointerover', (e) => {
@@ -815,14 +808,6 @@
         } else if (!el.matches('[data-form-btn]')) {
           this.sfx('tap');
         }
-      });
-
-      document.addEventListener('input', (e) => {
-        if (!e.target.matches('[data-form-input]')) return;
-        const now = performance.now();
-        if (now - lastType < 45) return;
-        lastType = now;
-        this.sfx('type');
       });
 
       // a bright little arpeggio as the message goes out
