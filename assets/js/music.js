@@ -9,6 +9,8 @@
  */
 (function () {
 
+  const MUSIC_VOLUME = 0.34; // master level for the soundtrack, kept well under the page
+  const SFX_VOLUME = 0.9;    // interaction sounds, on their own bus beside the music
   const FADE = 3.2;          // crossfade length in seconds
   const LOOKAHEAD = 0.3;     // schedule bars this far ahead of the playhead
   const STORAGE_KEY = 'portfolio-music';
@@ -586,6 +588,95 @@
 
 
   /**
+   * interaction sounds: short synthesised blips, taps and chimes. Pitches come
+   * from the playing piece's opening chord, so every click lands in key.
+   * Each takes (music, options) and plays immediately on music.sfxBus.
+   */
+
+  const SFX = {
+
+    // the faintest glassy tick when the pointer lands on something interactive
+    hover(m) {
+      const c = m.ctx, t = c.currentTime, g = c.createGain();
+      strike(g, t, 0.17, 0.06);
+      osc(c, 'sine', mtof(pick(m.keyNotes()) + 36), t, t + 0.08).connect(g).connect(m.sfxOut(rand(-0.3, 0.3), 0.1));
+    },
+
+    // a soft wooden tap for buttons and links
+    tap(m) {
+      const c = m.ctx, t = c.currentTime, out = m.sfxOut(rand(-0.15, 0.15), 0.12);
+      const f = mtof(pick(m.keyNotes()) + 24), g = c.createGain();
+      strike(g, t, 0.3, 0.16);
+      const o = osc(c, 'triangle', f, t, t + 0.2);
+      o.frequency.exponentialRampToValueAtTime(f * 0.7, t + 0.08);
+      o.connect(g).connect(out);
+
+      // tiny transient on top for a crisp edge
+      const n = c.createBufferSource(), hp = c.createBiquadFilter(), ng = c.createGain();
+      n.buffer = m.noise;
+      hp.type = 'highpass';
+      hp.frequency.value = 2500;
+      strike(ng, t, 0.12, 0.025);
+      n.connect(hp).connect(ng).connect(out);
+      n.start(t);
+      n.stop(t + 0.04);
+    },
+
+    // keystrokes in the contact form: barely-there ticks
+    type(m) {
+      const c = m.ctx, t = c.currentTime, g = c.createGain();
+      strike(g, t, 0.12, 0.035);
+      osc(c, 'triangle', rand(1700, 2400), t, t + 0.05).connect(g).connect(m.sfxOut(rand(-0.2, 0.2), 0));
+    },
+
+    // filters and dropdowns: a quick two-step blip
+    select(m) {
+      const c = m.ctx, t = c.currentTime, notes = m.keyNotes(), out = m.sfxOut(0, 0.15);
+      [notes[1], notes[3]].forEach((n, k) => {
+        const g = c.createGain(), at = t + k * 0.055;
+        strike(g, at, 0.13, 0.12);
+        osc(c, 'sine', mtof(n + 24), at, at + 0.15).connect(g).connect(out);
+      });
+    },
+
+    // little bell chime; `notes` are MIDI numbers played as a quick arpeggio
+    chime(m, { notes, gap = 0.09, vol = 0.06, decay = 1.3, verb = 0.35 }) {
+      const c = m.ctx, t = c.currentTime;
+      notes.forEach((n, k) => {
+        const at = t + k * gap, f = mtof(n), out = m.sfxOut((k / Math.max(1, notes.length - 1) - 0.5) * 0.5, verb);
+        for (const [ratio, amp, dk] of [[1, 1, 1], [2.76, 0.28, 0.3], [5.4, 0.08, 0.12]]) {
+          const g = c.createGain();
+          strike(g, at, vol * amp, decay * dk);
+          osc(c, 'sine', f * ratio, at, at + decay * dk + 0.05).connect(g).connect(out);
+        }
+      });
+    },
+
+    // airy swoosh for the sidebar opening (up) or closing (down)
+    swoosh(m, { up }) {
+      const c = m.ctx, t = c.currentTime, dur = 0.32;
+      const n = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+      n.buffer = m.noise;
+      bp.type = 'bandpass';
+      bp.Q.value = 1.2;
+      bp.frequency.setValueAtTime(up ? 450 : 2400, t);
+      bp.frequency.exponentialRampToValueAtTime(up ? 2400 : 450, t + dur);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.17, t + dur * 0.4);
+      g.gain.linearRampToValueAtTime(0, t + dur);
+      n.connect(bp).connect(g).connect(m.sfxOut(0, 0.25));
+      n.start(t);
+      n.stop(t + dur + 0.05);
+    }
+
+  };
+
+  // what makes which sound
+  const HOVER_TARGETS = '.navbar-link, .service-item, .project-item > a, .social-link, .contact-link, .filter-item button, .select-item button, .skill-label, .form-btn, .info_more-btn, .music-toggle, .service-item-title a';
+
+
+
+  /**
    * engine: audio graph, transport and the on-page toggle
    */
 
@@ -600,6 +691,7 @@
       this.current = null;
 
       button.addEventListener('click', () => this.toggle());
+      this.bindSfx();
 
       document.addEventListener('visibilitychange', () => {
         if (!this.ctx || !this.enabled) return;
@@ -654,11 +746,90 @@
       this.reverb.buffer = ir;
       this.reverb.connect(gainAt(c, 0, 0.55)).connect(this.bus);
 
+      // sound effects skip the music's fades and level, with a light compressor of their own
+      const sfxComp = c.createDynamicsCompressor();
+      sfxComp.threshold.value = -20;
+      sfxComp.ratio.value = 4;
+      this.sfxBus = c.createGain();
+      this.sfxBus.gain.value = SFX_VOLUME;
+      this.sfxBus.connect(sfxComp).connect(c.destination);
+
       this.noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
       const nd = this.noise.getChannelData(0);
       for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 
       this.timer = setInterval(() => this.tick(), 50);
+    }
+
+    // sound effects follow the sound toggle, so nobody gets surprise noises
+    sfx(name, opts) {
+      if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+      SFX[name](this, opts || {});
+    }
+
+    sfxOut(pan, verb) {
+      const c = this.ctx, p = c.createStereoPanner();
+      p.pan.value = pan;
+      p.connect(this.sfxBus);
+      if (verb) p.connect(gainAt(c, 0, verb)).connect(this.reverb);
+      return p;
+    }
+
+    // pitches for UI sounds: the opening chord of a piece (the current one by default)
+    keyNotes(song) {
+      return chord(SONGS[song || this.song].prog[0][1]);
+    }
+
+    bindSfx() {
+      const finePointer = window.matchMedia('(hover: hover)').matches;
+      let lastHover = 0, lastType = 0;
+
+      if (finePointer) {
+        document.addEventListener('pointerover', (e) => {
+          const el = e.target.closest(HOVER_TARGETS);
+          if (!el || el.contains(e.relatedTarget) || e.pointerType !== 'mouse') return;
+          const now = performance.now();
+          if (now - lastHover < 70) return;
+          lastHover = now;
+          this.sfx('hover');
+        });
+      }
+
+      document.addEventListener('click', (e) => {
+        const el = e.target.closest('a, button, .skill-label');
+        if (!el || el.disabled || el.closest('[data-music-toggle]')) return;
+
+        if (el.matches('[data-nav-link]')) {
+          // a rising pair from the destination piece's key
+          const page = el.textContent.trim().toLowerCase();
+          const notes = this.keyNotes(SONGS[page] ? page : null);
+          this.sfx('chime', { notes: [notes[2] + 12, notes[4] + 12], gap: 0.08, vol: 0.08 });
+        } else if (el.matches('[data-sidebar-btn]')) {
+          // the sidebar's own handler has already run, so its class tells us the new state
+          this.sfx('swoosh', { up: document.querySelector('[data-sidebar]').classList.contains('active') });
+        } else if (el.matches('[data-filter-btn], [data-select-item], [data-select]')) {
+          this.sfx('select');
+        } else if (el.matches('.skill-label')) {
+          const notes = this.keyNotes();
+          this.sfx('chime', { notes: [notes[4] + 12], vol: 0.13, decay: 1.8 });
+        } else if (!el.matches('[data-form-btn]')) {
+          this.sfx('tap');
+        }
+      });
+
+      document.addEventListener('input', (e) => {
+        if (!e.target.matches('[data-form-input]')) return;
+        const now = performance.now();
+        if (now - lastType < 45) return;
+        lastType = now;
+        this.sfx('type');
+      });
+
+      // a bright little arpeggio as the message goes out
+      document.addEventListener('submit', () => {
+        const notes = this.keyNotes();
+        this.sfx('chime', { notes: [notes[1] + 12, notes[2] + 12, notes[3] + 12, notes[4] + 24], gap: 0.07, vol: 0.06, decay: 1.6, verb: 0.5 });
+      }, true);
     }
 
     tick() {
@@ -686,8 +857,11 @@
 
     enable() {
       if (!this.ctx) this.setup();
-      this.ctx.resume();
       this.enabled = true;
+      this.ctx.resume().then(() => {
+        const n = this.keyNotes();
+        this.sfx('chime', { notes: [n[0] + 12, n[2] + 12, n[4] + 12], gap: 0.09, vol: 0.07 });
+      });
       // drop any tail left over from when music was switched off mid-fade
       for (const p of this.players) p.kill();
       this.players = [];
@@ -695,13 +869,15 @@
       const now = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(now);
       this.master.gain.setValueAtTime(this.master.gain.value, now);
-      this.master.gain.linearRampToValueAtTime(0.85, now + 1.5);
+      this.master.gain.linearRampToValueAtTime(MUSIC_VOLUME, now + 1.5);
       this.playCurrent();
       this.writePref(true);
       this.render(true);
     }
 
     disable() {
+      const n = this.keyNotes();
+      this.sfx('chime', { notes: [n[4] + 12, n[1] + 12], gap: 0.09, vol: 0.065, decay: 0.8 });
       this.enabled = false;
       const now = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(now);
