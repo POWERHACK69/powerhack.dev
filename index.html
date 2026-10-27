@@ -36,6 +36,14 @@
   <canvas class="ascii-bg" data-ascii-bg aria-hidden="true"></canvas>
 
   <!--
+    - ambient music toggle, one piece per page
+  -->
+  <button class="music-toggle" type="button" data-music-toggle aria-pressed="false" aria-label="Play music">
+    <span class="music-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="music-label" data-music-label>Play music</span>
+  </button>
+
+  <!--
     - #MAIN
   -->
 
@@ -152,6 +160,12 @@
           <li class="social-item">
             <a href="https://www.linkedin.com/in/gregory-michael-azubuike-89a01724b/" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
               <ion-icon name="logo-linkedin"></ion-icon>
+            </a>
+          </li>
+
+          <li class="social-item">
+            <a href="https://github.com/POWERHACK69" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+              <ion-icon name="logo-github"></ion-icon>
             </a>
           </li>
 
@@ -1403,6 +1417,7 @@
     - custom js link
   -->
   <script src="./assets/js/ascii-bg.js"></script>
+  <script src="./assets/js/music.js"></script>
   <script src="./assets/js/script.js"></script>
 
   <!--

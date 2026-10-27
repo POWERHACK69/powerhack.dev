@@ -175,8 +175,10 @@ for (let i = 0; i < navigationLinks.length; i++) {
       }
     }
 
-    // swap the animated background to match the page
-    if (window.asciiBackground) window.asciiBackground.setScene(this.innerHTML.toLowerCase());
+    // swap the animated background and the music to match the page
+    const page = this.innerHTML.toLowerCase();
+    if (window.asciiBackground) window.asciiBackground.setScene(page);
+    if (window.portfolioMusic) window.portfolioMusic.setSong(page);
 
   });
 }
