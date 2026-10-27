@@ -175,6 +175,9 @@ for (let i = 0; i < navigationLinks.length; i++) {
       }
     }
 
+    // swap the animated background to match the page
+    if (window.asciiBackground) window.asciiBackground.setScene(this.innerHTML.toLowerCase());
+
   });
 }
 

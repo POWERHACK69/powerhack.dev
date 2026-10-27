@@ -5,7 +5,9 @@
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Personal Portfolio</title>
+  <title>Gregory-Michael Azubuike · Game Developer</title>
+  <meta name="description" content="Gregory-Michael Azubuike (POWERHACK): game developer, consultant, narrative designer and Godot educator.">
+  <meta name="theme-color" content="#03050b">
 
   <!--
     - favicon
@@ -24,12 +26,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
-  <script type="module" src="https://cdn.jsdelivr.net/npm/ionicons@latest/dist/ionicons/ionicons.esm.js"></script>
-  <script nomodule src="https://cdn.jsdelivr.net/npm/ionicons@latest/dist/ionicons/ionicons.js"></script>
-
 </head>
 
 <body>
+
+  <!--
+    - animated ascii background, one scene per page
+  -->
+  <canvas class="ascii-bg" data-ascii-bg aria-hidden="true"></canvas>
 
   <!--
     - #MAIN
@@ -134,19 +138,19 @@
         <ul class="social-list">
 
           <li class="social-item">
-            <a href="https://youtube.com/@-RedIndieGames" class="social-link">
+            <a href="https://youtube.com/@-RedIndieGames" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="YouTube">
               <ion-icon name="logo-youtube"></ion-icon>
             </a>
           </li>
 
           <li class="social-item">
-            <a href="https://discord.com/users/powerhack" class="social-link">
+            <a href="https://discord.com/users/powerhack" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="Discord">
               <ion-icon name="logo-discord"></ion-icon>
             </a>
           </li>
 
           <li class="social-item">
-            <a href="https://www.linkedin.com/in/gregory-michael-azubuike-89a01724b/" class="social-link">
+            <a href="https://www.linkedin.com/in/gregory-michael-azubuike-89a01724b/" class="social-link" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
               <ion-icon name="logo-linkedin"></ion-icon>
             </a>
           </li>
@@ -238,8 +242,7 @@
             <li class="service-item">
 
               <div class="service-icon-box">
-                <img src="./assets/images/gamedev.svg
-                " alt="design icon" width="40">
+                <img src="./assets/images/gamedev.svg" alt="Game programming icon" width="40">
               </div>
 
               <div class="service-content-box">
@@ -255,7 +258,7 @@
             <li class="service-item">
 
               <div class="service-icon-box">
-                <img src="./assets/images/question.svg" alt="Game Consulting" width="40">
+                <img src="./assets/images/question.svg" alt="Game consulting icon" width="40">
               </div>
 
               <div class="service-content-box">
@@ -271,7 +274,7 @@
             <li class="service-item">
 
               <div class="service-icon-box">
-                <img src="./assets/images/project.svg" alt="mobile app icon" width="40">
+                <img src="./assets/images/project.svg" alt="Project management icon" width="40">
               </div>
 
               <div class="service-content-box">
@@ -287,7 +290,7 @@
             <li class="service-item">
 
               <div class="service-icon-box">
-                <img src="./assets/images/script.svg" alt="camera icon" width="40">
+                <img src="./assets/images/script.svg" alt="Narrative design icon" width="40">
               </div>
 
               <div class="service-content-box">
@@ -313,12 +316,12 @@
             <li class="service-item">
         
               <div class="service-icon-box">
-                <img src="./assets/images/RED INDIE ICON.png" alt="design icon" width="40">
+                <img src="./assets/images/RED INDIE ICON.png" alt="Red Indie Games logo" width="40">
               </div>
         
               <div class="service-content-box">
                 <h4 class="h4 service-item-title">
-                  <a href="https://www.youtube.com/@-RedIndieGames" rel="noopener noreferrer">
+                  <a href="https://www.youtube.com/@-RedIndieGames" target="_blank" rel="noopener noreferrer">
                     Red Indie Games
                   </a>
                 </h4>
@@ -334,17 +337,6 @@
         
         </section>
         
-        <style>
-          .service-content-box a {
-            color: gold;
-            text-decoration: none;
-          }
-        
-          .service-content-box a:hover {
-            color: darkgoldenrod;
-            text-decoration: underline;
-          }
-        </style>
         
 
         <!--
@@ -710,7 +702,6 @@
 
           
           <div class="skills-section">
-            <h2><br></h2>
             <div class="skills-pentagon-container">
               <canvas id="skillsPentagon"></canvas>
               <div id="skillLabels" class="skill-labels"></div>
@@ -912,7 +903,7 @@
           <ul class="project-list">
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/hello-fellow-humans">
+              <a href="https://powerhack.itch.io/hello-fellow-humans" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -930,7 +921,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://redindiegames.itch.io/unauthorised">
+              <a href="https://redindiegames.itch.io/unauthorised" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -948,7 +939,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/santan32bit">
+              <a href="https://powerhack.itch.io/santan32bit" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -966,7 +957,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/dreambots">
+              <a href="https://powerhack.itch.io/dreambots" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -984,7 +975,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/bug-eater">
+              <a href="https://powerhack.itch.io/bug-eater" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1002,7 +993,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="tools & software">
-              <a href="https://t.me/MyIgda_bot">
+              <a href="https://t.me/MyIgda_bot" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1021,7 +1012,7 @@
 
 
             <li class="project-item  active" data-filter-item data-category="tools & software">
-              <a href="https://miha-my-intelligent-html-assistant.vercel.app/">
+              <a href="https://miha-my-intelligent-html-assistant.vercel.app/" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1040,7 +1031,7 @@
 
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://redindiegames.itch.io/tap">
+              <a href="https://redindiegames.itch.io/tap" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1059,7 +1050,7 @@
 
                         
             <li class="project-item  active" data-filter-item data-category="tools & software">
-              <a href="https://no-tofu-emoji-toolsite.vercel.app/">
+              <a href="https://no-tofu-emoji-toolsite.vercel.app/" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1077,7 +1068,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/memories">
+              <a href="https://powerhack.itch.io/memories" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1095,7 +1086,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/crystal-dreamz">
+              <a href="https://powerhack.itch.io/crystal-dreamz" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1113,7 +1104,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="games">
-              <a href="https://powerhack.itch.io/its-clausin-time">
+              <a href="https://powerhack.itch.io/its-clausin-time" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1131,7 +1122,7 @@
             </li>
 
             <li class="project-item  active" data-filter-item data-category="tools & software">
-              <a href="https://github.com/POWERHACK69/Interactive_Story_System/tree/3ac12b8e56414c4d2d424027c22a490be55dadd4">
+              <a href="https://github.com/POWERHACK69/Interactive_Story_System/tree/3ac12b8e56414c4d2d424027c22a490be55dadd4" target="_blank" rel="noopener noreferrer">
 
                 <figure class="project-img">
                   <div class="project-item-icon-box">
@@ -1411,6 +1402,7 @@
   <!--
     - custom js link
   -->
+  <script src="./assets/js/ascii-bg.js"></script>
   <script src="./assets/js/script.js"></script>
 
   <!--
