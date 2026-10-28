@@ -1,21 +1,20 @@
 'use strict';
 
 /**
- * Ambient soundtrack: one composed piece per page, synthesised live with the
- * Web Audio API and crossfaded when the page changes.
+ * Ambient soundtrack: one piece per page, crossfaded when the page changes.
  *
- * Each piece is a looping chord progression plus written melody lines;
- * a few layers (twinkles, bubbles, droplets) add gentle variation per bar.
+ * The pieces are pre-rendered audio files (assets/audio): Opus in WebM, with AAC as a fallback
+ * for browsers that can't decode Opus. They are fetched and decoded in the background once the
+ * page has loaded, so switching music on is instant. Interaction sounds are still synthesised
+ * live, pitched from each piece's opening chord so every click lands in key.
  */
 (function () {
 
   const MUSIC_VOLUME = 0.34; // master level for the soundtrack, kept well under the page
   const SFX_VOLUME = 0.45;   // interaction sounds, on their own bus beside the music
   const FADE = 3.2;          // crossfade length in seconds
-  const RENDER_RATE = 24000; // sample rate the loops are pre-rendered at (plenty for soft ambient music)
-  const TAIL = 6.5;          // seconds of reverb/echo tail carried past each rendered section
-  const SECTIONS = 4;        // each loop renders as this many sections at once, on separate threads
   const STORAGE_KEY = 'portfolio-music';
+  const AUDIO_DIR = './assets/audio/';
 
 
 
@@ -34,240 +33,41 @@
   const rand = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 
-  // 'E5:1.5 G5:0.5 r:2 | A5:4' -> [{ b, m, d }], beats from `start`; '|' is just a visual bar line
-  function seq(str, start, props) {
-    const out = [];
-    let b = start;
-    for (const tok of str.split(/[\s|]+/).filter(Boolean)) {
-      const [n, d] = tok.split(':');
-      if (n !== 'r') out.push(Object.assign({ b, m: midi(n), d: +d }, props));
-      b += +d;
+
+
+  /**
+   * the pieces, one per page. `key` is each piece's opening chord, which the sound effects
+   * and the background mini-games pitch themselves from.
+   */
+
+  const SONGS = {
+    about: { title: 'Aurora Fjord', file: 'aurora-fjord', key: 'D3 A3 C#4 E4 F#4' },
+    resume: { title: 'Lotus & Fireflies', file: 'lotus-and-fireflies', key: 'A3 C4 E4 G4 B4' },
+    portfolio: { title: 'Koi Pond', file: 'koi-pond', key: 'D3 A3 C4 E4 F4' },
+    contact: { title: 'Jellyfish Reef', file: 'jellyfish-reef', key: 'E3 B3 D#4 F#4 G#4' }
+  };
+
+  // Opus is smaller for the same quality; Safari versions without it get AAC
+  const FORMATS = new Audio().canPlayType('audio/webm; codecs="opus"') ? ['webm', 'm4a'] : ['m4a'];
+
+  // fetch and decode one piece, falling back to the next format if a browser can't decode the first.
+  // An offline context decodes without needing a click, and its buffers play in any context.
+  async function fetchLoop(file) {
+    let lastError;
+    for (const ext of FORMATS) {
+      try {
+        const res = await fetch(AUDIO_DIR + file + '.' + ext);
+        if (!res.ok) throw new Error(`${res.status} for ${file}.${ext}`);
+        return await new OfflineAudioContext(2, 1, 48000).decodeAudioData(await res.arrayBuffer());
+      } catch (e) { lastError = e; }
     }
-    return out;
+    throw lastError;
   }
 
-  // a sustained chord, voices spread gently across the stereo field
-  function padChord(ev, b, voicing, d, props) {
-    const notes = chord(voicing);
-    notes.forEach((m, k) => ev.push(Object.assign({ b, i: 'pad', m, d, v: 0.8, pan: (k / (notes.length - 1) - 0.5) * 0.7 }, props)));
-  }
-
 
 
   /**
-   * #ABOUT: "Aurora Fjord", D Lydian. Slow pad swells, a bell melody, starlight twinkles.
-   */
-
-  const auroraFjord = {
-    title: 'Aurora Fjord',
-    bpm: 58,
-    bars: 16,
-    echo: { beats: 0.75, fb: 0.38 },
-    bed: 'wind',
-    prog: [
-      ['D2', 'D3 A3 C#4 E4 F#4'],
-      ['D2', 'D3 B3 E4 G#4 B4'],
-      ['B1', 'B2 F#3 A3 C#4 D4'],
-      ['G1', 'G2 D3 F#3 B3 C#4'],
-      ['D2', 'D3 A3 C#4 E4 F#4'],
-      ['D2', 'D3 B3 E4 G#4 B4'],
-      ['G1', 'G2 D3 F#3 B3 C#4'],
-      ['A1', 'A2 E3 A3 B3 E4']
-    ],
-
-    compose() {
-      const ev = [];
-      this.prog.forEach(([root, voicing], n) => {
-        padChord(ev, n * 8, voicing, 8, { cut: 900, verb: 0.6 });
-        ev.push({ b: n * 8, i: 'bass', m: midi(root), d: 7.5, v: 0.7, verb: 0.2 });
-      });
-      ev.push(...seq(
-        'F#5:3 E5:1 A5:4 | G#5:2 B5:2 E5:4 | D5:3 C#5:1 F#5:4 | C#6:2 B5:2 A5:4 |' +
-        'A5:2 F#5:2 E5:2 D5:2 | E5:3 G#5:1 B5:4 | B5:2 A5:1 F#5:1 C#6:4 | B5:3 A5:1 E5:4',
-        0, { i: 'bell', part: 'melody', v: 0.75, verb: 0.55, echo: 0.3, decay: 4.5 }
-      ));
-      return ev;
-    },
-
-    // stars: high chord tones twinkling at random
-    extras(bar, add) {
-      const notes = chord(this.prog[(bar >> 1) % this.prog.length][1]);
-      for (let e = 0; e < 8; e++) {
-        if (Math.random() < 0.28) {
-          add({ b: e * 0.5, i: 'bell', m: pick(notes) + pick([12, 24]), d: 1, v: rand(0.12, 0.22), pan: rand(-0.8, 0.8), verb: 0.7, echo: 0.5, decay: 2.5 });
-        }
-      }
-    }
-  };
-
-
-
-  /**
-   * #RESUME: "Lotus & Fireflies", A minor pentatonic. Koto-like plucks over a warm pad.
-   */
-
-  const lotusFireflies = {
-    title: 'Lotus & Fireflies',
-    bpm: 74,
-    bars: 16,
-    echo: { beats: 1, fb: 0.3 },
-    bed: 'water',
-    prog: [
-      ['A2', 'A3 C4 E4 G4 B4'],
-      ['F2', 'F3 A3 C4 E4 G4'],
-      ['C2', 'C3 G3 B3 E4 G4'],
-      ['G2', 'G3 B3 D4 E4 G4'],
-      ['A2', 'A3 C4 E4 G4 B4'],
-      ['F2', 'F3 A3 C4 E4 G4'],
-      ['D2', 'D3 F3 A3 C4 E4'],
-      ['E2', 'E3 A3 B3 D4 E4']
-    ],
-
-    compose() {
-      const ev = [];
-      // gentle broken-chord ostinato: one . three five . four three .
-      const pattern = [0, -1, 2, 4, -1, 3, 2, -1];
-      this.prog.forEach(([root, voicing], n) => {
-        const notes = chord(voicing);
-        padChord(ev, n * 8, voicing, 8, { v: 0.5, cut: 700, verb: 0.5 });
-        ev.push({ b: n * 8, i: 'bass', m: midi(root), d: 3.5, v: 0.75 });
-        ev.push({ b: n * 8 + 4, i: 'bass', m: midi(root) + 7, d: 3.5, v: 0.55 });
-        for (let half = 0; half < 2; half++) {
-          pattern.forEach((p, s) => {
-            if (p >= 0) ev.push({ b: n * 8 + half * 4 + s * 0.5, i: 'pluck', m: notes[p] + 12, d: 0.5, v: 0.32, pan: -0.25, verb: 0.3, decay: 1.2 });
-          });
-        }
-      });
-      ev.push(...seq(
-        'E5:1.5 G5:0.5 A5:2 G5:1 E5:1 D5:2 | C5:2 D5:1 E5:1 G5:3 E5:1 | E5:1 D5:1 C5:2 G4:2 A4:2 | D5:3 E5:1 D5:4 |' +
-        'A5:1 C6:1 A5:1 G5:1 E5:2 G5:2 | A5:3 G5:1 E5:2 D5:2 | F5:2 E5:1 D5:1 C5:2 D5:2 | B4:2 D5:2 E5:4',
-        0, { i: 'pluck', part: 'melody', v: 0.7, pan: 0.2, verb: 0.45, echo: 0.25, decay: 2.2 }
-      ));
-      return ev;
-    },
-
-    // fireflies blinking high above the pond, the odd droplet below
-    extras(bar, add) {
-      const penta = ['A6', 'C7', 'D7', 'E7', 'G7'].map(midi);
-      for (let beat = 0; beat < 4; beat++) {
-        if (Math.random() < 0.3) add({ b: beat + pick([0, 0.5]), i: 'bell', m: pick(penta), d: 0.5, v: rand(0.08, 0.16), pan: rand(-0.9, 0.9), verb: 0.75, echo: 0.6, decay: 1.4 });
-      }
-      if (Math.random() < 0.45) add({ b: rand(0, 4), i: 'drop', m: midi(pick(['E6', 'G6', 'A6'])), d: 0.2, v: rand(0.4, 0.7), pan: rand(-0.6, 0.6), verb: 0.5 });
-    }
-  };
-
-
-
-  /**
-   * #PORTFOLIO: "Koi Pond", D minor. Rippling harp arpeggios under a breathy flute.
-   */
-
-  const koiPond = {
-    title: 'Koi Pond',
-    bpm: 80,
-    bars: 16,
-    echo: { beats: 1.5, fb: 0.28 },
-    bed: 'water',
-    prog: [
-      ['D2', 'D3 A3 C4 E4 F4'],
-      ['Bb1', 'Bb2 F3 A3 C4 D4'],
-      ['G1', 'G2 D3 F3 A3 Bb3'],
-      ['A1', 'A2 E3 G3 A3 D4'],
-      ['D2', 'D3 A3 C4 E4 F4'],
-      ['F1', 'F2 C3 E3 A3 C4'],
-      ['G1', 'G2 D3 F3 A3 Bb3'],
-      ['A1', 'A2 E3 A3 C#4 E4']
-    ],
-
-    compose() {
-      const ev = [];
-      // arpeggios rise and fall like a fish's arc; the pan drifts across with them
-      const shape = [0, 1, 2, 3, 4, 3, 2, 1];
-      this.prog.forEach(([root, voicing], n) => {
-        const notes = chord(voicing);
-        padChord(ev, n * 8, voicing, 8, { v: 0.45, cut: 650, verb: 0.5 });
-        ev.push({ b: n * 8, i: 'bass', m: midi(root), d: 5.5, v: 0.75 });
-        ev.push({ b: n * 8 + 6, i: 'bass', m: midi(root) + 7, d: 1.8, v: 0.5 });
-        for (let half = 0; half < 2; half++) {
-          shape.forEach((p, s) => {
-            const pan = Math.sin((half * 8 + s) / 16 * Math.PI * 2) * 0.6;
-            ev.push({ b: n * 8 + half * 4 + s * 0.5, i: 'harp', m: notes[p] + 12, d: 1, v: 0.3, pan, verb: 0.4, echo: 0.12 });
-          });
-        }
-      });
-      ev.push(...seq(
-        'A4:2 D5:1 E5:1 F5:3 E5:1 | D5:2 C5:1 D5:1 F5:4 | G5:3 F5:1 D5:2 Bb4:2 | A4:6 r:2 |' +
-        'D5:1 E5:1 F5:2 A5:3 G5:1 | F5:2 E5:1 C5:1 A4:4 | Bb4:2 C5:2 D5:2 G5:2 | E5:3 C#5:1 A4:4',
-        0, { i: 'flute', part: 'melody', v: 0.7, pan: 0.1, verb: 0.5, echo: 0.2 }
-      ));
-      return ev;
-    },
-
-    // a koi breaks the surface now and then
-    extras(bar, add) {
-      if (Math.random() < 0.35) add({ b: rand(0, 4), i: 'drop', m: midi(pick(['D6', 'F6', 'A6'])), d: 0.2, v: rand(0.3, 0.55), pan: rand(-0.7, 0.7), verb: 0.5 });
-    }
-  };
-
-
-
-  /**
-   * #CONTACT: "Jellyfish Reef", E Lydian. A wavering underwater pad, soft mallets, rising bubbles.
-   */
-
-  const jellyfishReef = {
-    title: 'Jellyfish Reef',
-    bpm: 64,
-    bars: 16,
-    echo: { beats: 0.75, fb: 0.45 },
-    bed: 'deep',
-    prog: [
-      ['E2', 'E3 B3 D#4 F#4 G#4'],
-      ['C#2', 'C#3 G#3 B3 D#4 E4'],
-      ['A1', 'A2 E3 G#3 B3 C#4'],
-      ['B1', 'B2 F#3 G#3 B3 E4'],
-      ['E2', 'E3 B3 D#4 F#4 G#4'],
-      ['G#1', 'G#2 D#3 F#3 B3 D#4'],
-      ['A1', 'A2 E3 G#3 B3 D#4'],
-      ['B1', 'B2 F#3 A#3 D#4 F#4']
-    ],
-
-    compose() {
-      const ev = [];
-      this.prog.forEach(([root, voicing], n) => {
-        const notes = chord(voicing);
-        padChord(ev, n * 8, voicing, 8, { v: 0.7, cut: 800, wobble: true, verb: 0.65 });
-        ev.push({ b: n * 8, i: 'bass', m: midi(root), d: 7.5, v: 0.8 });
-        // mallets on dotted eighths drift against the beat, like slow pulsing bells
-        for (let s = 0; s * 0.75 < 8; s++) {
-          ev.push({ b: n * 8 + s * 0.75, i: 'marimba', m: notes[(s * 2 + 1) % notes.length] + 12, d: 0.5, v: s % 2 ? 0.22 : 0.32, pan: s % 2 ? 0.45 : -0.45, verb: 0.45, echo: 0.3 });
-        }
-      });
-      ev.push(...seq(
-        'B4:3 G#4:1 D#5:4 | E5:2 D#5:2 B4:4 | C#5:3 E5:1 G#5:4 | F#5:6 E5:2 |' +
-        'G#5:2 F#5:2 D#5:2 B4:2 | D#5:3 F#5:1 B5:4 | C#5:2 D#5:2 E5:4 | F#5:3 D#5:1 B4:4',
-        0, { i: 'glass', part: 'melody', v: 0.75, verb: 0.7, echo: 0.4 }
-      ));
-      return ev;
-    },
-
-    extras(bar, add) {
-      const n = Math.random() < 0.6 ? (2 + Math.random() * 4) | 0 : 0;
-      let b = rand(0, 3);
-      for (let k = 0; k < n; k++) {
-        add({ b, i: 'bubble', m: midi(pick(['E5', 'G#5', 'B5', 'C#6', 'E6'])), d: 0.1, v: rand(0.4, 0.8), pan: rand(-0.8, 0.8), verb: 0.5, echo: 0.2 });
-        b += rand(0.08, 0.2);
-      }
-    }
-  };
-
-  const SONGS = { about: auroraFjord, resume: lotusFireflies, portfolio: koiPond, contact: jellyfishReef };
-
-
-
-  /**
-   * instruments: each takes (player, time, frequency, duration, velocity, event)
-   * and connects its voice to player.voiceOut()
+   * shared audio building blocks
    */
 
   function osc(c, type, freq, t, stop) {
@@ -292,175 +92,6 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
   }
 
-  const INST = {
-
-    pad(p, t, f, dur, v, ev) {
-      const c = p.ctx, end = t + dur, stop = end + 5;
-      const lp = c.createBiquadFilter(), g = c.createGain();
-      lp.type = 'lowpass';
-      lp.frequency.value = ev.cut || 1000;
-      lp.Q.value = 0.4;
-      const lvl = v * 0.04;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(lvl, t + 1.8);
-      g.gain.setValueAtTime(lvl, end);
-      g.gain.setTargetAtTime(0, end, 0.9);
-      for (const [type, det, mul, amp] of [['sawtooth', -8, 1, 1], ['sawtooth', 7, 1, 1], ['triangle', 0, 0.5, 0.8]]) {
-        const o = osc(c, type, f * mul, t, stop);
-        o.detune.value = det;
-        o.connect(gainAt(c, t, amp)).connect(lp);
-      }
-      if (ev.wobble) {
-        // slow filter sway: the sound of being underwater
-        const lfo = osc(c, 'sine', 0.13, t, stop);
-        lfo.connect(gainAt(c, t, 380)).connect(lp.frequency);
-      }
-      lp.connect(g).connect(p.voiceOut(ev));
-    },
-
-    bass(p, t, f, dur, v, ev) {
-      const c = p.ctx, end = t + dur;
-      const lp = c.createBiquadFilter(), g = c.createGain();
-      lp.type = 'lowpass';
-      lp.frequency.value = 380;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(v * 0.32, t + 0.12);
-      g.gain.setValueAtTime(v * 0.32, end);
-      g.gain.setTargetAtTime(0, end, 0.3);
-      osc(c, 'sine', f, t, end + 2).connect(lp);
-      osc(c, 'triangle', f, t, end + 2).connect(gainAt(c, t, 0.35)).connect(lp);
-      lp.connect(g).connect(p.voiceOut(ev));
-    },
-
-    // glassy bell: fundamental plus two inharmonic partials
-    bell(p, t, f, dur, v, ev) {
-      const c = p.ctx, decay = ev.decay || 3.5, out = p.voiceOut(ev);
-      for (const [ratio, amp, dk] of [[1, 1, 1], [2.76, 0.32, 0.35], [5.4, 0.1, 0.15]]) {
-        const g = c.createGain();
-        strike(g, t, v * 0.14 * amp, decay * dk);
-        osc(c, 'sine', f * ratio, t, t + decay * dk + 0.1).connect(g).connect(out);
-      }
-    },
-
-    // koto-like pluck: bright attack that darkens, with a small upward bend into pitch
-    pluck(p, t, f, dur, v, ev) {
-      const c = p.ctx, decay = ev.decay || 1.6, stop = t + decay + 0.1;
-      const lp = c.createBiquadFilter(), g = c.createGain();
-      lp.type = 'lowpass';
-      lp.Q.value = 1.4;
-      lp.frequency.setValueAtTime(5200, t);
-      lp.frequency.exponentialRampToValueAtTime(900, t + 0.35);
-      strike(g, t, v * 0.2, decay);
-      const a = osc(c, 'triangle', f * 0.985, t, stop), b = osc(c, 'sawtooth', f * 0.985, t, stop);
-      a.frequency.exponentialRampToValueAtTime(f, t + 0.06);
-      b.frequency.exponentialRampToValueAtTime(f, t + 0.06);
-      a.connect(lp);
-      b.connect(gainAt(c, t, 0.22)).connect(lp);
-      lp.connect(g).connect(p.voiceOut(ev));
-    },
-
-    harp(p, t, f, dur, v, ev) {
-      const c = p.ctx, decay = 2.4, stop = t + decay + 0.1;
-      const lp = c.createBiquadFilter(), g = c.createGain();
-      lp.type = 'lowpass';
-      lp.frequency.setValueAtTime(3200, t);
-      lp.frequency.exponentialRampToValueAtTime(1100, t + 0.5);
-      strike(g, t, v * 0.2, decay);
-      osc(c, 'triangle', f, t, stop).connect(lp);
-      osc(c, 'sine', f * 2, t, stop).connect(gainAt(c, t, 0.15)).connect(lp);
-      lp.connect(g).connect(p.voiceOut(ev));
-    },
-
-    // breathy flute: sine body, delayed vibrato and a whisper of filtered noise
-    flute(p, t, f, dur, v, ev) {
-      const c = p.ctx, end = t + dur * p.spb * 0.95, stop = end + 1;
-      const g = c.createGain(), lvl = v * 0.11;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(lvl, t + 0.12);
-      g.gain.setValueAtTime(lvl, end);
-      g.gain.setTargetAtTime(0, end, 0.12);
-
-      const body = osc(c, 'sine', f, t, stop), over = osc(c, 'triangle', f * 2, t, stop);
-      const vib = osc(c, 'sine', 5.2, t, stop), depth = c.createGain();
-      depth.gain.setValueAtTime(0, t);
-      depth.gain.linearRampToValueAtTime(f * 0.006, t + 0.5);
-      vib.connect(depth);
-      depth.connect(body.frequency);
-      depth.connect(over.frequency);
-      body.connect(g);
-      over.connect(gainAt(c, t, 0.07)).connect(g);
-
-      const breath = c.createBufferSource(), bp = c.createBiquadFilter();
-      breath.buffer = p.engine.noise;
-      breath.loop = true;
-      bp.type = 'bandpass';
-      bp.frequency.value = f * 2;
-      bp.Q.value = 2;
-      breath.connect(bp).connect(gainAt(c, t, 0.35)).connect(g);
-      breath.start(t);
-      breath.stop(stop);
-
-      g.connect(p.voiceOut(ev));
-    },
-
-    marimba(p, t, f, dur, v, ev) {
-      const c = p.ctx, out = p.voiceOut(ev);
-      for (const [ratio, amp, decay] of [[1, 1, 1.1], [4, 0.18, 0.14], [10, 0.04, 0.03]]) {
-        const g = c.createGain();
-        strike(g, t, v * 0.22 * amp, decay);
-        osc(c, 'sine', f * ratio, t, t + decay + 0.05).connect(g).connect(out);
-      }
-    },
-
-    // the reef lead: soft sine with gentle overtones and a slow swell
-    glass(p, t, f, dur, v, ev) {
-      const c = p.ctx, end = t + dur * p.spb, stop = end + 3;
-      const g = c.createGain(), lvl = v * 0.09;
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(lvl, t + 0.25);
-      g.gain.setValueAtTime(lvl, end);
-      g.gain.setTargetAtTime(0, end, 0.5);
-      const vib = osc(c, 'sine', 4.2, t, stop), depth = gainAt(c, t, f * 0.004);
-      vib.connect(depth);
-      for (const [ratio, amp] of [[1, 1], [2, 0.14], [3, 0.05]]) {
-        const o = osc(c, 'sine', f * ratio, t, stop);
-        depth.connect(o.frequency);
-        o.connect(gainAt(c, t, amp)).connect(g);
-      }
-      g.connect(p.voiceOut(ev));
-    },
-
-    // water droplet: a fast upward chirp
-    drop(p, t, f, dur, v, ev) {
-      const c = p.ctx, g = c.createGain();
-      strike(g, t, v * 0.09, 0.12);
-      const o = osc(c, 'sine', f * 0.6, t, t + 0.15);
-      o.frequency.exponentialRampToValueAtTime(f * 1.6, t + 0.07);
-      o.connect(g).connect(p.voiceOut(ev));
-    },
-
-    bubble(p, t, f, dur, v, ev) {
-      const c = p.ctx, g = c.createGain();
-      strike(g, t, v * 0.07, 0.16);
-      const o = osc(c, 'sine', f, t, t + 0.2);
-      o.frequency.exponentialRampToValueAtTime(f * 2.6, t + 0.1);
-      o.connect(g).connect(p.voiceOut(ev));
-    }
-  };
-
-  // looping filtered-noise ambience under each piece
-  const BEDS = {
-    wind: { type: 'bandpass', freq: 520, q: 0.7, level: 0.028, sweep: 320, rate: 0.06 },
-    water: { type: 'lowpass', freq: 900, q: 0.3, level: 0.014, sweep: 250, rate: 0.11 },
-    deep: { type: 'lowpass', freq: 240, q: 0.6, level: 0.06, sweep: 90, rate: 0.08 }
-  };
-
-
-
-  /**
-   * shared audio building blocks
-   */
-
   // a long, soft hall built from decaying stereo noise
   function makeReverb(c, seconds) {
     const verb = c.createConvolver();
@@ -482,138 +113,6 @@
     const d = buf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     return buf;
-  }
-
-
-
-  /**
-   * one piece, scheduled into an offline context, with its own dry, reverb and echo buses
-   */
-
-  class Player {
-
-    constructor(engine, def) {
-      const c = this.ctx = engine.ctx;
-      this.engine = engine;
-      this.def = def;
-      this.spb = 60 / def.bpm;
-      this.barLen = this.spb * 4;
-
-      this.dry = c.createGain();
-      this.wet = c.createGain();
-      this.dry.connect(engine.bus);
-      this.wet.connect(engine.reverb);
-
-      // tempo-synced echo, darkened a little on each repeat
-      this.echo = c.createGain();
-      const delay = c.createDelay(4), fb = c.createGain(), tone = c.createBiquadFilter();
-      delay.delayTime.value = def.echo.beats * this.spb;
-      fb.gain.value = def.echo.fb;
-      tone.type = 'lowpass';
-      tone.frequency.value = 2600;
-      this.echo.connect(delay);
-      delay.connect(tone).connect(fb).connect(delay);
-      tone.connect(engine.bus);
-      tone.connect(gainAt(c, 0, 0.4)).connect(engine.reverb);
-
-      // events grouped by bar
-      this.byBar = Array.from({ length: def.bars }, () => []);
-      for (const ev of def.compose()) this.byBar[Math.floor(ev.b / 4) % def.bars].push(ev);
-    }
-
-    voiceOut(ev) {
-      const c = this.ctx, pan = c.createStereoPanner();
-      pan.pan.value = ev.pan || 0;
-      pan.connect(this.dry);
-      if (ev.verb) pan.connect(gainAt(c, 0, ev.verb)).connect(this.wet);
-      if (ev.echo) pan.connect(gainAt(c, 0, ev.echo)).connect(this.echo);
-      return pan;
-    }
-
-    // bars [first, first + count), with bar `first` starting at time 0
-    scheduleBars(first, count) {
-      for (let n = first; n < first + count; n++) this.scheduleBar(n, (n - first) * this.barLen);
-    }
-
-    startBed(now) {
-      const b = BEDS[this.def.bed];
-      if (!b) return;
-      const c = this.ctx, src = c.createBufferSource(), f = c.createBiquadFilter(), g = gainAt(c, now, b.level);
-      src.buffer = this.engine.noise;
-      src.loop = true;
-      f.type = b.type;
-      f.frequency.value = b.freq;
-      f.Q.value = b.q;
-      const lfo = osc(c, 'sine', b.rate, now, now + 3600);
-      lfo.connect(gainAt(c, now, b.sweep)).connect(f.frequency);
-      src.connect(f).connect(g);
-      g.connect(this.dry);
-      g.connect(gainAt(c, now, 0.5)).connect(this.wet);
-      src.start(now);
-    }
-
-    scheduleBar(n, barStart) {
-      const loopBar = n % this.def.bars, offset = loopBar * 4;
-      for (const ev of this.byBar[loopBar]) this.play(ev, barStart + (ev.b - offset) * this.spb);
-      if (this.def.extras) this.def.extras(loopBar, (ev) => this.play(ev, barStart + ev.b * this.spb));
-    }
-
-    play(ev, t) {
-      const inst = INST[ev.i || 'bell'];
-      // a touch of human looseness on the struck instruments
-      const loose = ev.i === 'pluck' || ev.i === 'harp' || ev.i === 'marimba';
-      const v = loose ? ev.v * rand(0.85, 1.1) : ev.v;
-      inst(this, Math.max(this.ctx.currentTime, t + (loose ? rand(0, 0.012) : 0)), mtof(ev.m), ev.i === 'pad' || ev.i === 'bass' ? ev.d * this.spb : ev.d, v, ev);
-    }
-
-  }
-
-  // one offline render: either a run of bars, or (with `bed`) the whole loop's ambience bed
-  async function renderSection(def, seconds, schedule) {
-    const off = new OfflineAudioContext(2, Math.round(seconds * RENDER_RATE), RENDER_RATE);
-    const bus = off.createGain();
-    bus.connect(off.destination);
-    const reverb = makeReverb(off, 3.5);
-    reverb.connect(gainAt(off, 0, 0.55)).connect(bus);
-    schedule(new Player({ ctx: off, bus, reverb, noise: makeNoise(off) }, def));
-    return off.startRendering();
-  }
-
-  /**
-   * Render a piece once into a seamless looping buffer. Synthesising every note live was
-   * too much for phones and lower-end devices (the audio thread fell behind and crackled);
-   * a pre-rendered loop costs almost nothing to play back.
-   *
-   * The bars are split into sections rendered in parallel, each carrying its reverb and echo
-   * tail past its end; the tails overlap into the next section, and the last one wraps
-   * around onto the start so the loop has no seam.
-   */
-  async function renderLoop(def) {
-    const barLen = 4 * 60 / def.bpm, loopLen = def.bars * barLen;
-    const per = Math.ceil(def.bars / SECTIONS);
-    const jobs = [];
-    for (let first = 0; first < def.bars; first += per) {
-      const count = Math.min(per, def.bars - first);
-      jobs.push(renderSection(def, count * barLen + TAIL, (pl) => pl.scheduleBars(first, count))
-        .then((buffer) => ({ buffer, offset: first * barLen, tail: true })));
-    }
-    jobs.push(renderSection(def, loopLen, (pl) => pl.startBed(0)).then((buffer) => ({ buffer, offset: 0, tail: false })));
-    const parts = await Promise.all(jobs);
-
-    const frames = Math.round(loopLen * RENDER_RATE), fade = Math.round(0.5 * RENDER_RATE);
-    const loop = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: RENDER_RATE });
-    for (let ch = 0; ch < 2; ch++) {
-      const dst = loop.getChannelData(ch);
-      for (const { buffer, offset, tail } of parts) {
-        const src = buffer.getChannelData(ch), at = Math.round(offset * RENDER_RATE), n = src.length;
-        for (let i = 0; i < n; i++) {
-          // ease out the very end of each tail so nothing is ever cut off mid-ring
-          const g = tail && i > n - fade ? (n - i) / fade : 1;
-          dst[(at + i) % frames] += src[i] * g;
-        }
-      }
-    }
-    return loop;
   }
 
 
@@ -742,7 +241,7 @@
       this.enabled = false;
       this.song = null;
       this.current = null;     // { name, src, gain } of the loop that is playing
-      this.loops = new Map();  // rendered loops by song name (promises), most recent last
+      this.loops = new Map();  // decoded loops by song name (promises)
       this.gamesOpened = false;
       this.optOut = false;
 
@@ -808,17 +307,24 @@
       this.noise = makeNoise(c);
     }
 
-    // the rendered loop for a piece, rendering it the first time; only the last two are kept
+    // the decoded loop for a piece, fetching it the first time and keeping it after
     loadLoop(name) {
       let p = this.loops.get(name);
-      if (p) {
-        this.loops.delete(name);
-      } else {
-        p = renderLoop(SONGS[name]);
+      if (!p) {
+        p = fetchLoop(SONGS[name].file);
+        // a failed render is forgotten so the next request tries again
+        p.catch(() => { if (this.loops.get(name) === p) this.loops.delete(name); });
+        this.loops.set(name, p);
       }
-      this.loops.set(name, p);
-      while (this.loops.size > 2) this.loops.delete(this.loops.keys().next().value);
       return p;
+    }
+
+    // load every piece in the background once the page has settled, the current page's first,
+    // one at a time so it never competes with the page; switching music on or changing page is
+    // then instant. It needs no click and makes no sound. About 1.9MB to download.
+    preload() {
+      const order = [this.song, ...Object.keys(SONGS).filter((n) => n !== this.song)];
+      order.reduce((prev, name) => prev.then(() => this.loadLoop(name)).catch(() => {}), Promise.resolve());
     }
 
     fadeOut(track, seconds) {
@@ -848,7 +354,7 @@
 
     // pitches for UI sounds: the opening chord of a piece (the current one by default)
     keyNotes(song) {
-      return chord(SONGS[song || this.song].prog[0][1]);
+      return chord(SONGS[song || this.song].key);
     }
 
     bindSfx() {
@@ -905,7 +411,7 @@
       this.render(changed && this.enabled);
     }
 
-    // the old piece keeps playing while the new one renders, then they crossfade
+    // the old piece keeps playing while the new one loads, then they crossfade
     playCurrent() {
       const name = this.song, wanted = { name };
       this.wanted = wanted;
@@ -1008,5 +514,9 @@
   music.setSong(active ? active.dataset.page : 'about');
 
   window.portfolioMusic = music;
+
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 200));
+  const preload = () => idle(() => music.preload(), { timeout: 2000 });
+  if (document.readyState === 'complete') preload(); else window.addEventListener('load', preload, { once: true });
 
 })();
