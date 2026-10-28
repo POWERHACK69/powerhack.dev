@@ -1110,8 +1110,10 @@ main {
 .skills-section {
   padding: 20px 0 0;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
+  gap: 24px 32px;
   width: 100%;
   max-width: 800px;
   margin: 0 auto;
@@ -1119,10 +1121,10 @@ main {
 
 .skills-pentagon-container {
   position: relative;
+  flex: 1 1 400px;
   width: 100%;
-  max-width: 500px;
-  aspect-ratio: 1/1;
-  margin-bottom: 40px;
+  max-width: 520px;
+  aspect-ratio: 4/3;
 }
 
 #skillsPentagon {
@@ -1144,22 +1146,29 @@ main {
   position: absolute;
   font-weight: var(--fw-500);
   text-align: center;
-  width: 120px;
   color: var(--white-2);
   cursor: pointer;
   transition: color 0.2s ease;
   pointer-events: auto; /* Re-enable clicks on labels */
-  font-size: clamp(0.75rem, 2vw, 1rem);
+  font-size: clamp(0.75rem, 1.6vw, 0.9rem);
   line-height: 1.2;
 }
 
-.skill-label:hover {
+.skill-label:hover,
+.skill-label.active {
   color: var(--orange-yellow-crayola);
+}
+
+.skill-label:focus-visible {
+  outline: 1px solid var(--orange-yellow-crayola);
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 .skill-percentage {
   display: block;
-  font-size: clamp(0.7rem, 1.8vw, 0.85rem);
+  font-size: 0.7rem;
+  white-space: nowrap;
   font-weight: var(--fw-500);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1167,35 +1176,24 @@ main {
   margin-top: 3px;
 }
 
+/* wide screens: a reading panel beside the chart (below it when there isn't room) */
 .skill-explanation {
-  position: absolute;
+  flex: 1 1 240px;
+  max-width: 320px;
   background-color: var(--glass-strong);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border: 1px solid hsla(45, 100%, 72%, 0.45);
+  border: 1px solid hsla(45, 100%, 72%, 0.25);
   border-radius: 14px;
   padding: 16px 18px;
-  width: 300px;
-  max-width: min(400px, 80vw);
   color: var(--light-gray);
   font-size: var(--fs-6);
   font-weight: var(--fw-300);
   line-height: 1.55;
-  z-index: 10;
-  box-shadow: var(--shadow-3);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s, visibility 0.3s;
+  transition: border-color var(--transition-1);
 }
 
-.skill-explanation.visible {
-  opacity: 1;
-  visibility: visible;
-}
+.skill-explanation.visible { border-color: hsla(45, 100%, 72%, 0.55); }
 
-/* main is its own stacking context (z-index: 1), so lift it while a skill card is open
-   or the card slides under the fixed music button on phones */
-main:has(.skill-explanation.visible) { z-index: 12; }
+.skill-explanation-hint { color: var(--light-gray-70); }
 
 .skill-explanation-title {
   color: var(--orange-yellow-crayola);
@@ -1223,7 +1221,7 @@ main:has(.skill-explanation.visible) { z-index: 12; }
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 20px;
+  width: 100%;
 }
 
 .legend-item {
@@ -1250,28 +1248,86 @@ main:has(.skill-explanation.visible) { z-index: 12; }
   display: none;
 }
 
-/* Media queries for responsiveness */
-@media (max-width: 768px) {
-  .skills-pentagon-container {
-    max-width: 400px;
-  }
-}
+/* phones and tablets: a smaller chart with names only, and the detail in a list beneath it
+   (the breakpoint matches compactQuery in script.js) */
 
-@media (max-width: 480px) {
-  .skills-pentagon-container {
-    max-width: 320px;
+.skill-list { display: none; }
+
+@media (max-width: 767px) {
+  .skills-section {
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 0;
   }
+
+  .skills-pentagon-container {
+    flex: none;
+    max-width: 420px;
+  }
+
+  .skills-legend { margin-top: 12px; }
 
   .skill-label {
-    width: 100px;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    padding: 4px 0;
   }
 
-  .skill-explanation {
-    width: calc(100vw - 40px);
-    left: 50% !important;
-    transform: translateX(-50%);
-    top: auto !important;
-    bottom: -200px;
+  .skill-explanation { display: none; }
+
+  .skill-list {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .skill-row {
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    background: hsla(0, 0%, 100%, 0.02);
+    transition: border-color var(--transition-1), background var(--transition-1);
+  }
+
+  .skill-row.open {
+    border-color: hsla(45, 100%, 72%, 0.45);
+    background: hsla(45, 100%, 72%, 0.05);
+  }
+
+  .skill-row-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 14px;
+    color: var(--white-2);
+    font-size: var(--fs-7);
+    font-weight: var(--fw-500);
+  }
+
+  .skill-row-name { flex: 1; }
+
+  .skill-row-tier {
+    color: var(--orange-yellow-crayola);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .skill-row-head ion-icon {
+    color: var(--light-gray-70);
+    transition: transform var(--transition-1);
+  }
+
+  .skill-row.open .skill-row-head ion-icon { transform: rotate(180deg); }
+
+  .skill-row-detail {
+    padding: 0 14px 14px;
+    color: var(--light-gray);
+    font-size: var(--fs-7);
+    font-weight: var(--fw-300);
+    line-height: 1.55;
   }
 }
 
