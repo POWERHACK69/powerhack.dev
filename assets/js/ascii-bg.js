@@ -495,11 +495,20 @@
 
     /**
      * mini-game "Wishing Stars": catch shooting stars before they fall into the fjord.
-     * Each catch rings the next note up the scale; streaks make the aurora flare,
-     * and every tenth wish something in the sky opens its eye.
+     * The first catches ring up the scale; from a streak of three, each catch plays the next note
+     * of "Twinkle Twinkle Little Star". Streaks make the aurora flare, and every tenth wish
+     * something in the sky opens its eye.
      */
 
     let st = null;
+
+    // the tune in semitones above the tonic, one note per catch; a miss starts it over
+    const TWINKLE_FROM = 3;
+    const TWINKLE = [
+      0, 0, 7, 7, 9, 9, 7,  5, 5, 4, 4, 2, 2, 0,
+      7, 7, 5, 5, 4, 4, 2,  7, 7, 5, 5, 4, 4, 2,
+      0, 0, 7, 7, 9, 9, 7,  5, 5, 4, 4, 2, 2, 0
+    ];
 
     // the eye's size and centre; it is drawn larger on narrow screens so its gaze reads on a phone
     function eyeShape(g) {
@@ -578,7 +587,14 @@
         }
         spawnBurst(st.bursts, best.x, best.y, 18, 170, 0.75, 'fire');
         spawnBurst(st.bursts, best.x, best.y, 10, 80, 1, 'aur');
-        g.sound('chime', { notes: [scaleNote(g.key(), st.combo - 1) + 12], vol: 0.09, decay: 1.8, verb: 0.5 });
+        if (st.combo < TWINKLE_FROM) {
+          g.sound('chime', { notes: [scaleNote(g.key(), st.combo - 1) + 12], vol: 0.09, decay: 1.8, verb: 0.5 });
+        } else {
+          // the last note of each line ("star", "are", ...) rings on a little longer
+          const step = (st.combo - TWINKLE_FROM) % TWINKLE.length;
+          const tonic = Math.min(...g.key()) + 24;
+          g.sound('chime', { notes: [tonic + TWINKLE[step]], vol: 0.09, decay: step % 7 === 6 ? 2.8 : 1.8, verb: 0.5 });
+        }
         g.emit({ type: 'gain', value: mult, x: best.x, y: best.y });
         if (st.catches % 10 === 0) {
           st.eye = { t0: st.time };
