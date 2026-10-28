@@ -694,16 +694,6 @@
       o.connect(g).connect(m.sfxOut(rand(-0.3, 0.3), 0.3));
     },
 
-    // corrupted data: a stutter of random square-wave blips
-    glitch(m) {
-      const c = m.ctx, t = c.currentTime, out = m.sfxOut(0, 0.1);
-      for (let n = 0; n < 7; n++) {
-        const at = t + n * 0.035, g = c.createGain();
-        strike(g, at, 0.07, 0.03);
-        osc(c, 'square', rand(180, 1600), at, at + 0.04).connect(g).connect(out);
-      }
-    },
-
     // something vast and low, for the void and the watching sky
     void(m) {
       const c = m.ctx, t = c.currentTime, out = m.sfxOut(0, 0.6), g = c.createGain();
