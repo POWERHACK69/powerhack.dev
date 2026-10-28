@@ -414,11 +414,22 @@ body.scene-mode::after { opacity: 0.4; }
 }
 
 .game-return {
-  margin-top: 8px;
-  color: var(--light-gray-70);
+  margin-top: 10px;
+  color: var(--white-2);
   font-family: var(--ff-poppins);
-  font-size: 11px;
-  opacity: 0.75;
+  font-size: 13px;
+  font-weight: var(--fw-400);
+  text-shadow: 0 1px 3px hsla(0, 0%, 0%, 0.95), 0 0 12px hsla(240, 60%, 4%, 0.9);
+}
+
+.game-return strong {
+  color: var(--orange-yellow-crayola);
+  font-weight: var(--fw-600);
+  text-shadow: 0 0 10px hsla(45, 100%, 55%, 0.6), 0 1px 3px hsla(0, 0%, 0%, 0.95);
+}
+
+@media (min-width: 580px) {
+  .game-return { font-size: 14px; }
 }
 
 @keyframes game-in {

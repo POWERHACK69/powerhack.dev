@@ -62,7 +62,7 @@
   const TOYS = {
     about: { title: 'Wishing Stars', hint: 'Catch the shooting stars before they fall into the fjord', unit: 'wishes' },
     resume: { title: 'Bug Eater: Night Shift', hint: 'Snap your tongue at the fireflies · click a lily pad to hop · glowing bugs are worth more', unit: 'bugs eaten' },
-    portfolio: { title: 'Koi Feast', hint: 'Click or drag to scatter food for the koi', unit: 'koi fed' },
+    portfolio: { title: 'Koi Feast', hint: 'Click or drag to scatter food for the koi', unit: 'times koi fed' },
     contact: { title: 'Glow Chain', hint: 'One spark per round · light a jellyfish and watch the glow spread · beware the void', unit: 'glow' }
   };
 
@@ -1286,19 +1286,28 @@
       }
     }
 
+    // lowest a jelly's bell may sit at x so its tentacle tips still clear the reef
+    function seafloorLimit(g, x, R, tl) {
+      return reefTop[clamp(Math.floor(x / g.cw), 0, g.cols - 1)] - R * (tl + 0.3);
+    }
+
+    // new jellies appear in open water (fading in after the first few), never in the seabed
     function makeJelly(g, initial) {
       const sc = clamp(g.W / 1500, 0.6, 1.1);
+      const x = rand(g.W * 0.06, g.W * 0.94), R = rand(36, 70) * sc, tl = rand(2.2, 3.2);
+      const lowest = Math.max(g.H * 0.2, seafloorLimit(g, x, R, tl));
       return {
-        x: rand(g.W * 0.06, g.W * 0.94), y: initial ? rand(g.H * 0.1, g.H * 0.75) : g.H + rand(60, 200),
-        R: rand(36, 70) * sc, vx: rand(-5, 5), vy: 0, c: 0,
+        x, y: rand(Math.min(g.H * 0.15, lowest), lowest), R, tl,
+        vx: rand(-5, 5), vy: 0, c: 0, fade: initial ? 1 : 0,
         per: rand(2.8, 4), ph: rand(0, 10), thrust: rand(75, 105),
         grp: JELLY_GROUPS[(Math.random() * JELLY_GROUPS.length) | 0],
-        tn: 9 + (Math.random() * 4 | 0), tl: rand(2.2, 3.2), seed: rand(0, 100)
+        tn: 9 + (Math.random() * 4 | 0), seed: rand(0, 100)
       };
     }
 
     function drawJelly(g, j, t, Rg) {
       const { V, P, G } = g;
+      const a = j.fade;   // fades in when it first appears
       const c = j.c, bw = j.R * (1 - 0.2 * c), bh = j.R * 0.78 * (1 + 0.16 * c);
       const tilt = 0.22 * Math.sin(t * 0.21 + j.seed) + clamp(j.vx * 0.02, -0.2, 0.2);
       const ca = Math.cos(tilt), sa = Math.sin(tilt);
@@ -1313,7 +1322,7 @@
           const lx = ax * (1 - 0.35 * sf) + Math.sin(t * 1.4 + ph - s * 0.045) * (2 + s * 0.11);
           const ly = 3 + s * (0.9 + 0.1 * c);
           const k = g.at(j.x + lx * ca - ly * sa, j.y + lx * sa + ly * ca);
-          if (k >= 0) g.max(k, 0.5 * (1 - sf) + 0.12, pi(Rg, 0.3 + 0.45 * (1 - sf)));
+          if (k >= 0) g.max(k, (0.5 * (1 - sf) + 0.12) * a, pi(Rg, 0.3 + 0.45 * (1 - sf)));
         }
       }
 
@@ -1325,7 +1334,7 @@
           const sf = s / arm;
           const lx = ax * (1 - 0.5 * sf) + Math.sin(t * 1.1 + j.seed + n * 2.1 + s * 0.12) * (2 + 4 * sf);
           const ly = 2 + s;
-          g.disc(j.x + lx * ca - ly * sa, j.y + lx * sa + ly * ca, 3.5, (k) => g.max(k, 0.62 * (1 - sf * 0.6), pi(Rg, 0.5 + 0.35 * (1 - sf))));
+          g.disc(j.x + lx * ca - ly * sa, j.y + lx * sa + ly * ca, 3.5, (k) => g.max(k, 0.62 * (1 - sf * 0.6) * a, pi(Rg, 0.5 + 0.35 * (1 - sf))));
         }
       }
 
@@ -1346,11 +1355,12 @@
           v += 0.4 * Math.exp(-Math.pow((gr - 0.32) / 0.11, 2)) * (0.45 + 0.55 * Math.cos(Math.atan2(gy, gx) * 4 + j.seed));
           if (ly2 > -2) v = Math.max(v, 0.8);
           v = Math.min(1, v + (j.flash || 0) * 0.5);
-          V[k] = v; P[k] = pi(Rg, 0.2 + v * 0.8); G[k] = 0;
+          if (a < 1) g.max(k, v * a, pi(Rg, 0.2 + v * 0.8));
+          else { V[k] = v; P[k] = pi(Rg, 0.2 + v * 0.8); G[k] = 0; }
         } else if (ly2 < rim + 10 + (j.flash || 0) * 20) {
           // soft halo, flaring when the jelly has just been lit
           const ex = Math.sqrt(e) - 1, reach = 0.6 + (j.flash || 0) * 0.9;
-          if (ex < reach) g.max(k, (0.24 + (j.flash || 0) * 0.4) * Math.pow(1 - ex / reach, 2), pi(Rg, 0.25 + (j.flash || 0) * 0.5));
+          if (ex < reach) g.max(k, (0.24 + (j.flash || 0) * 0.4) * Math.pow(1 - ex / reach, 2) * a, pi(Rg, 0.25 + (j.flash || 0) * 0.5));
         }
       });
     }
@@ -1517,6 +1527,10 @@
           j.vx += (noise2(t * 0.1, j.seed) - 0.5) * 6 * dt;
           j.vx = clamp(j.vx, -10, 10);
           j.x += j.vx * dt; j.y += j.vy * dt;
+          if (j.fade < 1) j.fade = Math.min(1, j.fade + dt * 0.6);
+          // never sink into the reef
+          const floorY = seafloorLimit(g, j.x, j.R, j.tl);
+          if (j.y > floorY) { j.y = floorY; j.vy = Math.min(j.vy, 0); }
           if (j.flash) j.flash *= Math.exp(-2.2 * dt);
           if (j.y < -j.R * (j.tl + 1.5) || j.x < -j.R * 3 || j.x > W + j.R * 3) {
             // the extra jellies from the game drift away rather than respawning

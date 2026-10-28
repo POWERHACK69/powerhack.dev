@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Easter eggs: clicking the current page's tab three times in quick succession
+ * Easter eggs: clicking the current page's tab five times in quick succession
  * clears the page away and drops the visitor straight into that background's
  * mini-game. One more click on the tab, Escape, or switching pages brings it back.
  *
@@ -12,7 +12,8 @@
   const TOTALS_KEY = 'portfolio-game-totals';
   const EGGS_KEY = 'portfolio-eggs-found';
   const PAGES = ['about', 'resume', 'portfolio', 'contact'];
-  const TAP_GAP = 800;       // ms allowed between the three taps
+  const TAPS = 5;            // clicks on the current tab that open its game
+  const TAP_GAP = 800;       // ms allowed between those clicks
   const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
 
   const bg = window.asciiBackground;
@@ -152,7 +153,9 @@
     renderScore();
     unitEl.textContent = info.unit;
     multEl.classList.remove('is-on');
-    returnEl.textContent = touch ? `tap ${cap(page)} to return` : `click ${cap(page)} or press Esc to return`;
+    returnEl.innerHTML = touch
+      ? `Tap <strong>${cap(page)}</strong> to return`
+      : `Click <strong>${cap(page)}</strong> or press Esc to return`;
 
     card.querySelector('[data-game-egg]').textContent = isNew
       ? `easter egg found · ${found.size} of ${PAGES.length}`
@@ -191,13 +194,13 @@
     setTimeout(() => { if (!active) layer.hidden = true; }, 350);
   }
 
-  // clicks on the current page's tab: three quick ones open the game, one closes it
+  // clicks on the current page's tab: five quick ones open the game, one closes it
   let taps = 0, lastTap = 0;
 
   function tabClick(link) {
     const now = performance.now();
     if (active) {
-      // ignore the tail of the triple-click that opened the game
+      // ignore the tail of the burst of clicks that opened the game
       if (now - enteredAt > 600) exit();
       return;
     }
@@ -206,7 +209,7 @@
     link.classList.remove('is-charging');
     void link.offsetWidth;
     link.classList.add('is-charging');
-    if (taps >= 3) {
+    if (taps >= TAPS) {
       taps = 0;
       enter();
     } else {
@@ -235,11 +238,14 @@
     const text = notice.querySelector('[data-egg-text]');
     const left = PAGES.length - found.size;
     if (found.size === 0) {
-      text.innerHTML = `Psst… ${verb} <strong>${cap(currentPage())}</strong> 3 times to see an easter egg. I have 3 other easter eggs. Can you find them? ;-)`;
+      text.innerHTML = `Psst… ${verb} <strong>${cap(currentPage())}</strong> ${TAPS} times to uncover a hidden easter egg. ` +
+        `I've tucked 3 more away. Can you find them all? ;-)`;
     } else if (left > 0) {
-      text.innerHTML = `Psst… you've found <strong>${found.size} of ${PAGES.length}</strong> easter eggs. ${cap(verb)} a page's tab 3 times to hunt for the other ${left === 1 ? 'one' : left} ;-)`;
+      text.innerHTML = `Welcome back! You've found <strong>${found.size} of ${PAGES.length}</strong> easter eggs. ` +
+        `${cap(verb)} a page's tab ${TAPS} times to hunt down ${left === 1 ? 'the last one' : `the other ${left}`} ;-)`;
     } else {
-      text.innerHTML = `You found all <strong>${PAGES.length}</strong> easter eggs! ${cap(verb)} any tab 3 times to keep playing ;-)`;
+      text.innerHTML = `All <strong>${PAGES.length}</strong> easter eggs found, nicely done! ` +
+        `${cap(verb)} any tab ${TAPS} times to jump back in and keep your scores climbing ;-)`;
     }
     notice.querySelector('[data-egg-close]').addEventListener('click', hideNotice);
     setTimeout(() => {
