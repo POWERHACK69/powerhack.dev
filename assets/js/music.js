@@ -44,8 +44,14 @@
     about: { title: 'Aurora Fjord', file: 'aurora-fjord', key: 'D3 A3 C#4 E4 F#4' },
     resume: { title: 'Lotus & Fireflies', file: 'lotus-and-fireflies', key: 'A3 C4 E4 G4 B4' },
     portfolio: { title: 'Koi Pond', file: 'koi-pond', key: 'D3 A3 C4 E4 F4' },
-    contact: { title: 'Jellyfish Reef', file: 'jellyfish-reef', key: 'E3 B3 D#4 F#4 G#4' }
+    contact: { title: 'Jellyfish Reef', file: 'jellyfish-reef', key: 'E3 B3 D#4 F#4 G#4' },
+    // plays under the fjord game: a low D-major bed with no tune of its own, so the
+    // "Twinkle Twinkle" notes the player catches sit cleanly on top
+    wishes: { title: 'Wishing Stars', file: 'wishing-stars', key: 'D3 A3 D4 E4 F#4' }
   };
+
+  // pages whose mini-game swaps in a piece of its own
+  const GAME_SONGS = { about: 'wishes' };
 
   // Opus is smaller for the same quality; Safari versions without it get AAC
   const FORMATS = new Audio().canPlayType('audio/webm; codecs="opus"') ? ['webm', 'm4a'] : ['m4a'];
@@ -321,7 +327,7 @@
 
     // load every piece in the background once the page has settled, the current page's first,
     // one at a time so it never competes with the page; switching music on or changing page is
-    // then instant. It needs no click and makes no sound. About 1.9MB to download.
+    // then instant. It needs no click and makes no sound. About 2.4MB to download.
     preload() {
       const order = [this.song, ...Object.keys(SONGS).filter((n) => n !== this.song)];
       order.reduce((prev, name) => prev.then(() => this.loadLoop(name)).catch(() => {}), Promise.resolve());
@@ -478,9 +484,23 @@
     }
 
     // opening a game brings the music in, unless the visitor has since switched it off
-    startForGame() {
+    startForGame(page) {
       this.gamesOpened = true;
+      // a game with its own piece crossfades to it, remembering the page's piece for later
+      const gameSong = GAME_SONGS[page];
+      if (gameSong && this.song !== gameSong) {
+        this.pageSong = this.song;
+        this.setSong(gameSong);
+      }
       if (!this.enabled && !this.optOut) this.enable();
+    }
+
+    // leaving the game crossfades back to the page's own piece
+    endGame() {
+      if (!this.pageSong) return;
+      const song = this.pageSong;
+      this.pageSong = null;
+      this.setSong(song);
     }
 
     render(announce) {

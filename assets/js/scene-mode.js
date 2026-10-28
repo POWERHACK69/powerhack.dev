@@ -174,7 +174,7 @@
     panels().forEach((p) => { p.inert = true; });
     hideNotice();
 
-    if (music()) music().startForGame();
+    if (music()) music().startForGame(page);
     bg.setPlay(true);
     sound('swoosh', { up: false });
   }
@@ -191,6 +191,7 @@
     clearTimeout(saveTimer);
     save(TOTALS_KEY, totals);
     sound('swoosh', { up: true });
+    if (music()) music().endGame();
     setTimeout(() => { if (!active) layer.hidden = true; }, 350);
   }
 

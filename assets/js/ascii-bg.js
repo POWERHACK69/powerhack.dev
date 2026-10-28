@@ -606,12 +606,13 @@
       update(g, t, dt) {
         const { W, H, V, P, G } = g, R = S.pal.ranges;
         st.time = t;
-        const pace = 1 + Math.min(st.catches, 60) * 0.015;
+        // stars quicken gently as wishes add up, topping out at about 1.5x after 60 catches
+        const pace = 1 + Math.min(st.catches, 60) * 0.008;
 
         if (t > st.next && st.stars.filter(s => !s.dead).length < 4) {
           const right = Math.random() < 0.5;
           const a = right ? rand(0.5, 0.85) : Math.PI - rand(0.5, 0.85);
-          const sp = rand(230, 360) * pace * (W < 700 ? 0.75 : 1);
+          const sp = rand(150, 240) * pace * (W < 700 ? 0.8 : 1);
           st.stars.push({
             x: right ? rand(-0.1, 0.6) * W : rand(0.4, 1.1) * W, y: rand(-30, H * 0.15),
             vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dead: false
