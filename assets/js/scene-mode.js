@@ -239,13 +239,13 @@
     const left = PAGES.length - found.size;
     if (found.size === 0) {
       text.innerHTML = `Psst… ${verb} <strong>${cap(currentPage())}</strong> ${TAPS} times to uncover a hidden easter egg. ` +
-        `I've tucked 3 more away. Can you find them all? ;-)`;
+        `I've tucked 3 more away. Can you find them all? 😉`;
     } else if (left > 0) {
       text.innerHTML = `Welcome back! You've found <strong>${found.size} of ${PAGES.length}</strong> easter eggs. ` +
-        `${cap(verb)} a page's tab ${TAPS} times to hunt down ${left === 1 ? 'the last one' : `the other ${left}`} ;-)`;
+        `Keep hunting down ${left === 1 ? 'the last one' : `the other ${left}`} 😉`;
     } else {
       text.innerHTML = `All <strong>${PAGES.length}</strong> easter eggs found, nicely done! ` +
-        `${cap(verb)} any tab ${TAPS} times to jump back in and keep your scores climbing ;-)`;
+        `${cap(verb)} any tab ${TAPS} times to jump back in and keep your scores climbing 😉`;
     }
     notice.querySelector('[data-egg-close]').addEventListener('click', hideNotice);
     setTimeout(() => {

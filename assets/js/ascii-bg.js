@@ -811,8 +811,15 @@
         if (frog.hop) return;
         const reach = 320 * Math.max(flyScale, 0.85) * frog.growth;
 
-        // clicking another pad within a hop's reach jumps to it
-        const pad = pads.find(p => p !== frog.pad && Math.hypot(p.x - x, p.y - y) < p.R);
+        // aim assist: a click near a firefly's glow aims right at that firefly
+        let target = null, bd = (g.touch ? 75 : 60) * Math.max(flyScale, 0.85);
+        for (const f of flies) {
+          const d = Math.hypot(f.x - x, f.y - y);
+          if (d < bd) { bd = d; target = f; }
+        }
+
+        // clicking another pad within a hop's reach jumps to it, unless the click was meant for a bug
+        const pad = !target && pads.find(p => p !== frog.pad && Math.hypot(p.x - x, p.y - y) < p.R);
         if (pad && Math.hypot(pad.x - frog.x, pad.y - frog.y) < reach * 1.5 && !frog.tongue) {
           frog.ang = Math.atan2(pad.y - frog.y, pad.x - frog.x);
           frog.hop = { fx: frog.x, fy: frog.y, to: pad, t: 0 };
@@ -821,8 +828,9 @@
         }
 
         if (frog.tongue) return;
-        frog.ang = Math.atan2(y - frog.y, x - frog.x);
-        frog.tongue = { max: Math.min(Math.hypot(x - frog.x, y - frog.y), reach), len: 0, out: true, caught: [] };
+        const tx = target ? target.x : x, ty = target ? target.y : y;
+        frog.ang = Math.atan2(ty - frog.y, tx - frog.x);
+        frog.tongue = { max: Math.min(Math.hypot(tx - frog.x, ty - frog.y) + 12, reach), len: 0, out: true, caught: [] };
         g.sound('tap');
       },
 
@@ -865,10 +873,16 @@
           const tx = m.x + Math.cos(frog.ang) * tg.len, ty = m.y + Math.sin(frog.ang) * tg.len;
 
           if (tg.out) {
-            const grab = 30 * Math.max(flyScale, 0.85) * frog.growth;
+            // anything touching the tongue, mouth to tip, is caught: the tip moves over 100px a
+            // frame, so testing only the tip let fireflies slip through the gaps between frames
+            const ex = tx - m.x, ey = ty - m.y, l2 = ex * ex + ey * ey || 1;
             for (let n = flies.length - 1; n >= 0; n--) {
               const f = flies[n];
-              if (Math.hypot(f.x - tx, f.y - ty) < grab) {
+              const u = clamp(((f.x - m.x) * ex + (f.y - m.y) * ey) / l2, 0, 1);
+              const d = Math.hypot(f.x - (m.x + ex * u), f.y - (m.y + ey * u));
+              // the catch zone matches the visible glow, not just the tiny core
+              const grab = (f.gr * 0.55 + 10) * frog.growth;
+              if (d < grab) {
                 tg.caught.push({ lit: fireflyGlow(f, t) > 0.35 });
                 flies.splice(n, 1);
                 hunt.respawn.push(t + rand(1.5, 4));
