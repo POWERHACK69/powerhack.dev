@@ -344,7 +344,8 @@
         water: [['#040812', '#0d2140', '#1d4470'], 6],
         refl: [['#3aa088', '#1f7a62', '#245a8a', '#5a4a96'], 10],
         warm: [['#3a1a06', '#c96a1a', '#ffbe5c', '#fff0c4'], 8],
-        wood: [['#1a100a', '#4a3424', '#8a6a4c'], 4]
+        wood: [['#1a100a', '#4a3424', '#8a6a4c'], 4],
+        fire: [['#5a0a04', '#d0301a', '#ff7a1a', '#ffd23a', '#fffbe8'], 14]
       },
 
       init(g) {
@@ -549,7 +550,7 @@
         st.combo++;
         st.catches++;
         st.score += st.combo >= 3 ? 2 : 1;
-        spawnBurst(st.bursts, best.x, best.y, 16, 150, 0.7, 'star');
+        spawnBurst(st.bursts, best.x, best.y, 18, 170, 0.75, 'fire');
         spawnBurst(st.bursts, best.x, best.y, 10, 80, 1, 'aur');
         g.sound('chime', { notes: [scaleNote(g.key(), st.combo - 1) + 12], vol: 0.09, decay: 1.8, verb: 0.5 });
         g.emit({ type: 'score', value: st.score });
@@ -588,18 +589,9 @@
             st.stars.splice(n, 1);
             continue;
           }
-          const sp = Math.hypot(s.vx, s.vy), dx = s.vx / sp, dy = s.vy / sp, len = 120;
-          for (let d = 0; d < len; d += 3) {
-            const k = g.at(s.x - dx * d, s.y - dy * d);
-            if (k >= 0) g.max(k, 0.85 * Math.pow(1 - d / len, 1.3), pi(R.star, 0.3 + 0.7 * (1 - d / len)));
-          }
-          g.disc(s.x, s.y, 12, (k, ddx, ddy, d) => g.max(k, 0.35 * (1 - d / 12), pi(R.star, 0.6)));
-          const k = g.at(s.x, s.y);
-          if (k >= 0) { V[k] = 1; P[k] = pi(R.star, 1); G[k] = 9; }
         }
 
         boost += (Math.min(1.1, st.combo * 0.14) - boost) * Math.min(1, dt * 2);
-        drawParticles(g, st.bursts, R, dt);
 
         if (st.eye) {
           const e = t - st.eye.t0;
@@ -610,6 +602,26 @@
           else { st.eye = null; o = 0; }
           if (o > 0) drawEye(g, R, o * o * (3 - 2 * o), t);
         }
+
+        // stars burn in front of everything, the eye included: a white-hot head
+        // trailing yellow, orange and finally red embers
+        for (const s of st.stars) {
+          const sp = Math.hypot(s.vx, s.vy), dx = s.vx / sp, dy = s.vy / sp, len = 200;
+          g.disc(s.x, s.y, 30, (k, ddx, ddy, d) => g.max(k, 0.5 * (1 - d / 30), pi(R.fire, 0.75)));
+          for (let d = 0; d < len; d += 3) {
+            const f = 1 - d / len, w = 2 + 8 * f;
+            g.disc(s.x - dx * d, s.y - dy * d, w, (k) => {
+              V[k] = Math.max(V[k], 0.3 + 0.65 * Math.pow(f, 1.2));
+              P[k] = pi(R.fire, f);
+              G[k] = 0;
+            });
+          }
+          g.disc(s.x, s.y, 11, (k) => { V[k] = 1; P[k] = pi(R.fire, 1); G[k] = 0; });
+          const k = g.at(s.x, s.y);
+          if (k >= 0) { V[k] = 1; P[k] = pi(R.fire, 1); G[k] = 9; }
+        }
+
+        drawParticles(g, st.bursts, R, dt);
       }
     };
 
@@ -642,9 +654,10 @@
         pad: [['#071a0b', '#174a1c', '#2f7a2c', '#6abf4b', '#b8f07a'], 12],
         petal: [['#3a0f2a', '#a83a6e', '#ec8cb8', '#ffd6e8', '#fff6fa'], 12],
         seed: [['#5a4206', '#e6b830', '#fff09a'], 5],
-        fly: [['#1c2a06', '#7fd63a', '#e8ff8a', '#ffffe0'], 10],
+        fly: [['#2a2205', '#c99a12', '#ffd84a', '#fff8d0'], 10],
         ripple: [['#0f3f36', '#5fb8a2', '#bff5e6'], 5],
-        frog: [['#061a08', '#1f6a22', '#4fb83a', '#a6f06a', '#f4ffc0'], 10],
+        frog: [['#0a0824', '#23308f', '#3f6ae0', '#8a5ae8', '#d8c4ff'], 10],
+        frogEye: [['#3a2a04', '#ffd23a', '#fffbe0'], 4],
         tongue: [['#5a1030', '#e0507a', '#ffb8cc'], 6]
       },
 
@@ -759,7 +772,7 @@
       });
       for (const side of [-1, 1]) {
         blob(s * 0.62, side * s * 0.55, s * 0.36, s * 0.36, (k, e) => {
-          V[k] = e < 0.3 ? 0.12 : 0.95; P[k] = e < 0.3 ? R.frog.o : pi(R.frog, 1);
+          V[k] = e < 0.3 ? 0.12 : 0.95; P[k] = e < 0.3 ? R.frog.o : pi(R.frogEye, 0.8);
         });
       }
     }
