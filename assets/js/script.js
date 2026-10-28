@@ -162,7 +162,15 @@ const pages = document.querySelectorAll("[data-page]");
 
 // add event to all nav link
 for (let i = 0; i < navigationLinks.length; i++) {
-  navigationLinks[i].addEventListener("click", function () {
+  navigationLinks[i].addEventListener("click", function (e) {
+
+    // clicking the tab you're already on clears the panels to play with the scene
+    if (this.classList.contains("active")) {
+      e.sceneToggle = true;
+      if (window.sceneMode) window.sceneMode.toggle();
+      return;
+    }
+    if (window.sceneMode) window.sceneMode.exit();
 
     for (let i = 0; i < pages.length; i++) {
       if (this.innerHTML.toLowerCase() === pages[i].dataset.page) {

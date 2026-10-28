@@ -53,6 +53,46 @@
 
 
 
+  /**
+   * mini-games, one per scene; `round` scores keep the best single round, the rest accumulate
+   */
+
+  const TOYS = {
+    about: { title: 'Wishing Stars', hint: 'Catch shooting stars before they reach the fjord. Keep a streak going and the sky answers.', unit: 'wishes' },
+    resume: { title: 'Bug Eater: Night Shift', hint: 'Click to snap your tongue. Click a lily pad to hop. Glowing bugs are worth more, and your cursor lures them in.', unit: 'bugs' },
+    portfolio: { title: 'Koi Feast', hint: 'Click or drag to scatter food. Beware glitched pellets, and keep an eye out for the golden koi.', unit: 'fed' },
+    contact: { title: 'Glow Chain', hint: 'One spark per round. Click to set off a chain of jellyfish, and steer clear of the void.', unit: 'chain', round: true }
+  };
+
+  // the k-th step up a scale built from the music's chord tones
+  function scaleNote(key, k) {
+    const n = key.slice().sort((a, b) => a - b);
+    k = Math.min(k, n.length * 3 - 1);
+    return n[k % n.length] + 12 * (1 + Math.floor(k / n.length));
+  }
+
+  function spawnBurst(list, x, y, n, speed, life, grp) {
+    for (let k = 0; k < n; k++) {
+      const a = k / n * TAU + rand(-0.3, 0.3), s = speed * rand(0.5, 1.1);
+      list.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, age: 0, life: life * rand(0.7, 1.2), grp });
+    }
+  }
+
+  function drawParticles(g, list, R, dt) {
+    for (let n = list.length - 1; n >= 0; n--) {
+      const p = list[n];
+      p.age += dt;
+      if (p.age > p.life) { list.splice(n, 1); continue; }
+      const drag = Math.exp(-3 * dt);
+      p.vx *= drag; p.vy *= drag;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const f = 1 - p.age / p.life, k = g.at(p.x, p.y);
+      if (k >= 0) g.max(k, 0.25 + 0.7 * f, pi(R[p.grp], f));
+    }
+  }
+
+
+
   // palette helpers
 
   function hexToRgb(hex) {
@@ -239,6 +279,7 @@
 
     let hz, far, near, cabin, smoke;
     let _v = 0, _p = 0, _a = 0, _cf = 0, _h = 0;
+    let boost = 0;   // the aurora flares while a wishing streak is going
 
     // shape the cabin from glyphs; '.' is wall, 'W' the lit window
     const CABIN = [
@@ -281,7 +322,7 @@
 
       const a1 = curtain(H, x, y, t, 0.42, 0.06, 0.0035, 0.12, H * 0.32, 0), h1 = _h;
       const a2 = 0.75 * curtain(H, x, y, t, 0.27, 0.05, 0.0027, -0.08, H * 0.24, 5.3), h2 = _h;
-      const a = Math.max(a1, a2) + 0.3 * Math.min(a1, a2);
+      const a = (Math.max(a1, a2) + 0.3 * Math.min(a1, a2)) * (1 + boost);
       _a = a > 1 ? 1 : a;
       _cf = a1 >= a2 ? h1 : h2;
       if (_a * 0.95 > v) { v = _a * 0.95; p = pi(R.aur, _cf); }
@@ -447,6 +488,131 @@
       }
     };
 
+
+
+    /**
+     * mini-game "Wishing Stars": catch shooting stars before they fall into the fjord.
+     * Each catch rings the next note up the scale; streaks make the aurora flare,
+     * and every tenth wish something in the sky opens its eye.
+     */
+
+    let st = null;
+
+    function drawEye(g, R, o, t) {
+      const { W, H, V, P, G } = g;
+      const rx = Math.min(W * 0.2, 230), ry = rx * 0.4 * o, ex = W / 2, ey = H * 0.24;
+      if (ry < 2) return;
+      const mx = g.mouse.x - ex, my = g.mouse.y - ey, md = Math.hypot(mx, my) || 1;
+      const look = Math.min(rx * 0.3, md * 0.15);
+      const ix = ex + mx / md * look, iy = ey + my / md * look * 0.45;
+      const ri = rx * 0.36, rp = ri * (0.4 + 0.1 * Math.sin(t * 1.7));
+      const rim = g.ch * 0.7;
+      g.disc(ex, ey, rx + 4, (k, dx, dy) => {
+        const f = 1 - (dx / rx) * (dx / rx);
+        if (f <= 0) return;
+        const lid = ry * Math.pow(f, 0.8);
+        const ady = Math.abs(dy);
+        if (ady > lid + rim) return;
+        G[k] = 0;
+        if (ady > lid - rim * 0.4) { V[k] = 0.9; P[k] = pi(R.snow, 0.9); return; }
+        const di = Math.hypot(ex + dx - ix, ey + dy - iy);
+        // the pupil is a hole punched through the sky
+        if (di < rp) { V[k] = 0; return; }
+        if (di < ri) {
+          const v = 0.45 + 0.45 * Math.abs(Math.sin(Math.atan2(ey + dy - iy, ex + dx - ix) * 9 + di * 0.1));
+          V[k] = v; P[k] = pi(R.aur, 0.1 + 0.7 * di / ri);
+        } else {
+          V[k] = 0.2; P[k] = pi(R.snow, 0.2);
+        }
+      });
+    }
+
+    S.toy = {
+
+      start(g) {
+        st = { stars: [], bursts: [], score: 0, combo: 0, catches: 0, next: 0, eye: null, time: 0 };
+        g.emit({ type: 'score', value: 0 });
+      },
+
+      stop() { st = null; boost = 0; },
+
+      down(g, x, y) {
+        const reach = g.touch ? 72 : 52;
+        let best = null, bd = reach;
+        for (const s of st.stars) {
+          const d = Math.hypot(s.x - x, s.y - y);
+          if (!s.dead && d < bd) { bd = d; best = s; }
+        }
+        if (!best) { spawnBurst(st.bursts, x, y, 5, 50, 0.3, 'star'); return; }
+
+        best.dead = true;
+        st.combo++;
+        st.catches++;
+        st.score += st.combo >= 3 ? 2 : 1;
+        spawnBurst(st.bursts, best.x, best.y, 16, 150, 0.7, 'star');
+        spawnBurst(st.bursts, best.x, best.y, 10, 80, 1, 'aur');
+        g.sound('chime', { notes: [scaleNote(g.key(), st.combo - 1) + 12], vol: 0.09, decay: 1.8, verb: 0.5 });
+        g.emit({ type: 'score', value: st.score });
+        if (st.combo >= 3 && st.combo % 3 === 0) g.emit({ type: 'flash', text: `${st.combo} in a row · double wishes` });
+        if (st.catches % 10 === 0) {
+          st.eye = { t0: st.time };
+          g.emit({ type: 'flash', text: 'the sky is watching' });
+          g.sound('void');
+        }
+      },
+
+      update(g, t, dt) {
+        const { W, H, V, P, G } = g, R = S.pal.ranges;
+        st.time = t;
+        const pace = 1 + Math.min(st.score, 60) * 0.015;
+
+        if (t > st.next && st.stars.filter(s => !s.dead).length < 4) {
+          const right = Math.random() < 0.5;
+          const a = right ? rand(0.5, 0.85) : Math.PI - rand(0.5, 0.85);
+          const sp = rand(230, 360) * pace * (W < 700 ? 0.75 : 1);
+          st.stars.push({
+            x: right ? rand(-0.1, 0.6) * W : rand(0.4, 1.1) * W, y: rand(-30, H * 0.15),
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, dead: false
+          });
+          st.next = t + rand(0.7, 1.5) / pace;
+        }
+
+        for (let n = st.stars.length - 1; n >= 0; n--) {
+          const s = st.stars[n];
+          if (s.dead) { st.stars.splice(n, 1); continue; }
+          s.x += s.vx * dt; s.y += s.vy * dt;
+          if (s.y > hz || s.x < -80 || s.x > W + 80) {
+            // fell into the fjord: the streak breaks
+            if (s.y > hz) spawnBurst(st.bursts, s.x, hz + 4, 6, 60, 0.6, 'refl');
+            st.combo = 0;
+            st.stars.splice(n, 1);
+            continue;
+          }
+          const sp = Math.hypot(s.vx, s.vy), dx = s.vx / sp, dy = s.vy / sp, len = 120;
+          for (let d = 0; d < len; d += 3) {
+            const k = g.at(s.x - dx * d, s.y - dy * d);
+            if (k >= 0) g.max(k, 0.85 * Math.pow(1 - d / len, 1.3), pi(R.star, 0.3 + 0.7 * (1 - d / len)));
+          }
+          g.disc(s.x, s.y, 12, (k, ddx, ddy, d) => g.max(k, 0.35 * (1 - d / 12), pi(R.star, 0.6)));
+          const k = g.at(s.x, s.y);
+          if (k >= 0) { V[k] = 1; P[k] = pi(R.star, 1); G[k] = 9; }
+        }
+
+        boost += (Math.min(1.1, st.combo * 0.14) - boost) * Math.min(1, dt * 2);
+        drawParticles(g, st.bursts, R, dt);
+
+        if (st.eye) {
+          const e = t - st.eye.t0;
+          let o;
+          if (e < 0.8) o = e / 0.8;
+          else if (e < 6) o = e > 2.8 && e < 3.1 ? 1 - Math.sin((e - 2.8) / 0.3 * Math.PI) : 1;
+          else if (e < 6.8) o = 1 - (e - 6) / 0.8;
+          else { st.eye = null; o = 0; }
+          if (o > 0) drawEye(g, R, o * o * (3 - 2 * o), t);
+        }
+      }
+    };
+
     return S;
   }
 
@@ -458,7 +624,14 @@
 
   function lotusScene() {
 
-    let pads, flies, ripples, nextRipple;
+    let pads, flies, ripples, nextRipple, flyScale = 1;
+
+    function makeFly(x, y) {
+      return {
+        x, y, a: rand(0, TAU), s: rand(10, 28),
+        f: rand(0.7, 1.5), ph: rand(0, TAU), gr: rand(28, 46) * flyScale, seed: rand(0, 100)
+      };
+    }
 
     const S = {
 
@@ -470,11 +643,14 @@
         petal: [['#3a0f2a', '#a83a6e', '#ec8cb8', '#ffd6e8', '#fff6fa'], 12],
         seed: [['#5a4206', '#e6b830', '#fff09a'], 5],
         fly: [['#1c2a06', '#7fd63a', '#e8ff8a', '#ffffe0'], 10],
-        ripple: [['#0f3f36', '#5fb8a2', '#bff5e6'], 5]
+        ripple: [['#0f3f36', '#5fb8a2', '#bff5e6'], 5],
+        frog: [['#061a08', '#1f6a22', '#4fb83a', '#a6f06a', '#f4ffc0'], 10],
+        tongue: [['#5a1030', '#e0507a', '#ffb8cc'], 6]
       },
 
       init(g) {
         const { W, H } = g, area = W * H, sc = clamp(W / 1500, 0.65, 1.1);
+        flyScale = sc;
         pads = []; flies = []; ripples = []; nextRipple = 0;
 
         const nPads = clamp(Math.round(area / 100000), 6, 22);
@@ -485,12 +661,7 @@
         }
 
         const nFlies = clamp(Math.round(area / 32000), 12, 60);
-        for (let n = 0; n < nFlies; n++) {
-          flies.push({
-            x: rand(0, W), y: rand(0, H), a: rand(0, TAU), s: rand(10, 28),
-            f: rand(0.7, 1.5), ph: rand(0, TAU), gr: rand(28, 46) * sc, seed: rand(0, 100)
-          });
-        }
+        for (let n = 0; n < nFlies; n++) flies.push(makeFly(rand(0, W), rand(0, H)));
       },
 
       frame(g, t, dt) {
@@ -514,7 +685,8 @@
         drawRipples(g, ripples, R.ripple, dt);
 
         for (const p of pads) {
-          movePad(p, g, dt);
+          // pads hold still while the frog is hunting, so it never drifts off-screen
+          if (g.play) p.rot += p.vr * dt; else movePad(p, g, dt);
           drawPad(g, p, R.pad, R.water);
           if (p.flower) {
             const fx = p.x + Math.cos(p.rot + Math.PI) * p.R * 0.12;
@@ -545,6 +717,181 @@
       }
     };
 
+
+
+    /**
+     * mini-game "Bug Eater: Night Shift": a ravenous frog on the lily pads.
+     * Snap the tongue at fireflies (glowing ones are worth more), hop pad to pad,
+     * and every dozen bugs it lets out a burp and grows.
+     */
+
+    let frog = null, hunt = null;
+
+    function fireflyGlow(f, t) {
+      return Math.pow(Math.max(0, Math.sin(t * f.f + f.ph)), 2);
+    }
+
+    function drawFrog(g, R) {
+      const { V, P, G } = g;
+      const s = frog.size * frog.growth * frog.lift, ca = Math.cos(frog.ang), sa = Math.sin(frog.ang);
+      // an ellipse in the frog's own frame: u points where it faces, w across
+      const blob = (u, w, ru, rw, fn) => {
+        const cx = frog.x + u * ca - w * sa, cy = frog.y + u * sa + w * ca;
+        g.disc(cx, cy, Math.max(ru, rw), (k, dx, dy) => {
+          const lu = dx * ca + dy * sa, lw = -dx * sa + dy * ca;
+          const e = (lu / ru) * (lu / ru) + (lw / rw) * (lw / rw);
+          if (e < 1) { G[k] = 0; fn(k, e, lu, lw); }
+        });
+      };
+
+      // a shadow on the water while it is mid-hop, and a dark outline so it stands off the pad
+      if (frog.lift > 1.02) g.disc(frog.x + 10 * frog.lift, frog.y + 16 * frog.lift, s * 0.9, (k) => { V[k] *= 0.3; });
+      g.disc(frog.x, frog.y, s * 1.55, (k) => { V[k] *= 0.25; G[k] = 0; });
+
+      for (const side of [-1, 1]) {
+        blob(-s * 0.75, side * s * 0.85, s * 0.55, s * 0.3, (k) => { V[k] = 0.5; P[k] = pi(R.frog, 0.45); });
+        blob(s * 0.45, side * s * 0.95, s * 0.3, s * 0.2, (k) => { V[k] = 0.5; P[k] = pi(R.frog, 0.45); });
+      }
+      blob(0, 0, s * 1.15, s, (k, e, lu, lw) => {
+        const spot = noise2(lu * 0.15 + 7, lw * 0.15) > 0.66;
+        const v = spot ? 0.42 : 0.75 - 0.25 * e;
+        V[k] = v; P[k] = pi(R.frog, spot ? 0.25 : 0.5 + 0.35 * (1 - e));
+      });
+      for (const side of [-1, 1]) {
+        blob(s * 0.62, side * s * 0.55, s * 0.36, s * 0.36, (k, e) => {
+          V[k] = e < 0.3 ? 0.12 : 0.95; P[k] = e < 0.3 ? R.frog.o : pi(R.frog, 1);
+        });
+      }
+    }
+
+    function mouth() {
+      const s = frog.size * frog.growth;
+      return { x: frog.x + Math.cos(frog.ang) * s * 1.05, y: frog.y + Math.sin(frog.ang) * s * 1.05 };
+    }
+
+    S.toy = {
+
+      start(g) {
+        let best = pads[0], bd = Infinity;
+        for (const p of pads) {
+          const d = Math.hypot(p.x - g.W / 2, p.y - g.H * 0.7);
+          if (d < bd) { bd = d; best = p; }
+        }
+        frog = { pad: best, x: best.x, y: best.y, ang: -Math.PI / 2, size: 30 * Math.max(flyScale, 0.85), growth: 1, lift: 1, tongue: null, hop: null };
+        hunt = { score: 0, eaten: 0, combo: 0, last: -9, respawn: [], time: 0 };
+        g.emit({ type: 'score', value: 0 });
+      },
+
+      stop() { frog = null; hunt = null; },
+
+      down(g, x, y) {
+        if (frog.hop) return;
+        const reach = 320 * Math.max(flyScale, 0.85) * frog.growth;
+
+        // clicking another pad within a hop's reach jumps to it
+        const pad = pads.find(p => p !== frog.pad && Math.hypot(p.x - x, p.y - y) < p.R);
+        if (pad && Math.hypot(pad.x - frog.x, pad.y - frog.y) < reach * 1.5 && !frog.tongue) {
+          frog.ang = Math.atan2(pad.y - frog.y, pad.x - frog.x);
+          frog.hop = { fx: frog.x, fy: frog.y, to: pad, t: 0 };
+          g.sound('swoosh', { up: true });
+          return;
+        }
+
+        if (frog.tongue) return;
+        frog.ang = Math.atan2(y - frog.y, x - frog.x);
+        frog.tongue = { max: Math.min(Math.hypot(x - frog.x, y - frog.y), reach), len: 0, out: true, caught: [] };
+        g.sound('tap');
+      },
+
+      update(g, t, dt) {
+        const R = S.pal.ranges, { V, P, G } = g;
+        hunt.time = t;
+
+        // hop along an arc, landing with a plop and a ripple
+        if (frog.hop) {
+          const h = frog.hop;
+          h.t = Math.min(1, h.t + dt / 0.45);
+          frog.x = h.fx + (h.to.x - h.fx) * h.t;
+          frog.y = h.fy + (h.to.y - h.fy) * h.t;
+          frog.lift = 1 + 0.45 * Math.sin(Math.PI * h.t);
+          if (h.t >= 1) {
+            frog.pad = h.to;
+            frog.hop = null;
+            frog.lift = 1;
+            ripples.push({ x: frog.x, y: frog.y, age: 0, life: 2.2, size: frog.pad.R * 1.6, str: 0.6 });
+            g.sound('plop');
+          }
+        } else {
+          frog.x = frog.pad.x;
+          frog.y = frog.pad.y;
+          if (!frog.tongue && g.mouse.x > -999) {
+            frog.ang += angDiff(Math.atan2(g.mouse.y - frog.y, g.mouse.x - frog.x), frog.ang) * Math.min(1, dt * 6);
+          }
+        }
+
+        // the tongue: shoot out, grab whatever it touches, reel it in
+        const tg = frog.tongue;
+        if (tg) {
+          if (tg.out) {
+            tg.len += tg.max / 0.11 * dt;
+            if (tg.len >= tg.max) { tg.len = tg.max; tg.out = false; }
+          } else {
+            tg.len -= tg.max / 0.16 * dt;
+          }
+          const m = mouth();
+          const tx = m.x + Math.cos(frog.ang) * tg.len, ty = m.y + Math.sin(frog.ang) * tg.len;
+
+          if (tg.out) {
+            const grab = 30 * Math.max(flyScale, 0.85) * frog.growth;
+            for (let n = flies.length - 1; n >= 0; n--) {
+              const f = flies[n];
+              if (Math.hypot(f.x - tx, f.y - ty) < grab) {
+                tg.caught.push({ lit: fireflyGlow(f, t) > 0.35 });
+                flies.splice(n, 1);
+                hunt.respawn.push(t + rand(1.5, 4));
+              }
+            }
+          }
+
+          g.line(m.x, m.y, tx, ty, 2.2, (k) => { V[k] = 0.8; P[k] = pi(R.tongue, 0.6); G[k] = 0; });
+          g.disc(tx, ty, 5, (k) => { V[k] = 0.95; P[k] = pi(R.tongue, 1); G[k] = 0; });
+          for (const c of tg.caught) {
+            g.disc(tx, ty, 14, (k, dx, dy, d) => g.max(k, (c.lit ? 0.7 : 0.35) * (1 - d / 14), pi(R.fly, 0.8)));
+          }
+
+          if (tg.len <= 0) {
+            frog.tongue = null;
+            for (const c of tg.caught) {
+              hunt.combo = t - hunt.last < 2.5 ? hunt.combo + 1 : 1;
+              hunt.last = t;
+              hunt.eaten++;
+              hunt.score += (c.lit ? 3 : 1) * (hunt.combo >= 4 ? 2 : 1);
+              if (hunt.combo === 4) g.emit({ type: 'flash', text: 'feeding frenzy · double points' });
+              if (hunt.eaten % 12 === 0 && frog.growth < 1.8) {
+                frog.growth *= 1.12;
+                g.emit({ type: 'flash', text: 'BURP.' });
+                g.sound('gulp', { pitch: 0.45 });
+              }
+            }
+            if (tg.caught.length) {
+              g.sound('gulp', { pitch: tg.caught.some(c => c.lit) ? 1.3 : 1 });
+              g.emit({ type: 'score', value: hunt.score });
+            }
+          }
+        }
+
+        // fresh fireflies drift in from the edges to replace the eaten ones
+        for (let n = hunt.respawn.length - 1; n >= 0; n--) {
+          if (t < hunt.respawn[n]) continue;
+          hunt.respawn.splice(n, 1);
+          const side = Math.random() * 4 | 0;
+          flies.push(makeFly(side === 0 ? -20 : side === 1 ? g.W + 20 : rand(0, g.W), side === 2 ? -20 : side === 3 ? g.H + 20 : rand(0, g.H)));
+        }
+
+        drawFrog(g, R);
+      }
+    };
+
     return S;
   }
 
@@ -564,9 +911,12 @@
     { base: 'orange' }
   ];
 
+  // colours a glitched koi flickers through
+  const GLITCH_GROUPS = ['neon', 'red', 'gold', 'white', 'fin', 'black'];
+
   function koiScene() {
 
-    let fish, pads, ripples, nextRipple;
+    let fish, pads, ripples, nextRipple, food = [];
 
     function makeKoi(g, type) {
       const sc = clamp(g.W / 1400, 0.6, 1.1);
@@ -575,7 +925,7 @@
       const joints = [];
       for (let k = 0; k < N; k++) joints.push({ x: x - Math.cos(h) * k * seg, y: y - Math.sin(h) * k * seg });
       return {
-        L, N, seg, h, s0: rand(26, 44), s: 30, phase: rand(0, TAU), seed: rand(0, 100), z: rand(0.72, 1), type,
+        L, L0: L, N, seg, h, s0: rand(26, 44), s: 30, phase: rand(0, TAU), seed: rand(0, 100), z: rand(0.72, 1), type, glitch: 0,
         joints, rp: joints.map(p => ({ x: p.x, y: p.y })), wid: new Float32Array(N)
       };
     }
@@ -583,13 +933,30 @@
     function steer(f, g, t, dt) {
       const { W, H } = g, head = f.joints[0];
       let want = f.h + (noise2(t * 0.1, f.seed) - 0.5) * 1.6;
-      let ax = 0, ay = 0, flee = false;
-      // soft walls just past the screen edges, so turns can be wide arcs
+      let ax = 0, ay = 0, flee = false, hungry = false;
+      // soft walls just past the screen edges, so turns can be wide arcs (a departing koi ignores them)
       const m = f.L * 0.8, e = -f.L * 0.25;
-      if (head.x < e + m) ax += (e + m - head.x) / m;
-      if (head.x > W - e - m) ax -= (head.x - W + e + m) / m;
-      if (head.y < e + m) ay += (e + m - head.y) / m;
-      if (head.y > H - e - m) ay -= (head.y - H + e + m) / m;
+      if (!f.leaving) {
+        if (head.x < e + m) ax += (e + m - head.x) / m;
+        if (head.x > W - e - m) ax -= (head.x - W + e + m) / m;
+        if (head.y < e + m) ay += (e + m - head.y) / m;
+        if (head.y > H - e - m) ay -= (head.y - H + e + m) / m;
+      }
+
+      // during the feeding game, head for the nearest pellet
+      if (g.play && food.length && !f.leaving) {
+        let best = null, bd = 560;
+        for (const p of food) {
+          const d = Math.hypot(p.x - head.x, p.y - head.y);
+          if (d < bd) { bd = d; best = p; }
+        }
+        if (best) {
+          const pull = 0.6 + 1.8 * (1 - bd / 560);
+          ax += (best.x - head.x) / (bd || 1) * pull;
+          ay += (best.y - head.y) / (bd || 1) * pull;
+          hungry = true;
+        }
+      }
 
       for (const o of fish) {
         if (o === f) continue;
@@ -597,15 +964,16 @@
         if (d > 0 && d < 140) { ax += dx / d * (1 - d / 140) * 0.8; ay += dy / d * (1 - d / 140) * 0.8; }
       }
 
+      // shy of the cursor, except while being fed
       const mdx = head.x - g.mouse.x, mdy = head.y - g.mouse.y, md = Math.hypot(mdx, mdy);
-      if (md < 150 && md > 0) { ax += mdx / md * 2 * (1 - md / 150); ay += mdy / md * 2 * (1 - md / 150); flee = true; }
+      if (!g.play && md < 150 && md > 0) { ax += mdx / md * 2 * (1 - md / 150); ay += mdy / md * 2 * (1 - md / 150); flee = true; }
 
       if (ax || ay) want += angDiff(Math.atan2(ay, ax), want) * Math.min(1, Math.hypot(ax, ay));
 
       // turning circle wider than the body, so koi sweep in arcs instead of folding up
-      const turn = f.s / (f.L * (flee ? 0.35 : 0.6)) * dt;
+      const turn = f.s / (f.L * (flee ? 0.35 : hungry ? 0.42 : 0.6)) * dt;
       f.h += clamp(angDiff(want, f.h), -turn, turn);
-      const sp = f.s0 * (0.7 + 0.6 * noise2(t * 0.2, f.seed + 7)) * (flee ? 2.2 : 1);
+      const sp = f.s0 * (0.7 + 0.6 * noise2(t * 0.2, f.seed + 7)) * (flee ? 2.2 : hungry ? 1.7 : 1);
       f.s += (sp - f.s) * Math.min(1, dt * 1.5);
 
       head.x += Math.cos(f.h) * f.s * dt;
@@ -703,6 +1071,12 @@
           if (type.ink && noise2(bu * 9 + seed * 2, bside * 2 + 3) > type.inkThr) grp = type.ink;
 
           const k = j * cols + i;
+          if (f.glitch > 0) {
+            // corrupted: scales flicker between random colours and drop out in blocks
+            const h = hash2(k, f.gseed);
+            if (h < 0.12) continue;
+            grp = GLITCH_GROUPS[(h * 97 | 0) % GLITCH_GROUPS.length];
+          }
           V[k] = v; P[k] = pi(R[grp], v); G[k] = 0;
         }
       }
@@ -723,12 +1097,14 @@
         pad: [['#061509', '#123d18', '#276a28', '#5aa844', '#9ad86a'], 10],
         petal: [['#3a0f2a', '#a83a6e', '#ec8cb8', '#ffd6e8', '#fff6fa'], 10],
         seed: [['#5a4206', '#e6b830', '#fff09a'], 4],
-        ripple: [['#0e3a50', '#5aa8c8', '#cfefff'], 5]
+        ripple: [['#0e3a50', '#5aa8c8', '#cfefff'], 5],
+        food: [['#4a2a08', '#c0803a', '#ffd08a'], 5],
+        neon: [['#2a0a3a', '#ff2fd0', '#5ff6ff'], 6]
       },
 
       init(g) {
         const { W, H } = g, area = W * H;
-        ripples = []; nextRipple = 0; pads = [];
+        ripples = []; nextRipple = 0; pads = []; food = [];
         const n = clamp(Math.round(area / 210000), 3, 8);
         fish = [];
         for (let k = 0; k < n; k++) fish.push(makeKoi(g, KOI_TYPES[k % KOI_TYPES.length]));
@@ -757,6 +1133,11 @@
         }
 
         for (const f of fish) steer(f, g, t, dt);
+        // a koi on its way out is gone once it is well past the edge
+        fish = fish.filter((f) => {
+          const h = f.joints[0], m = f.L * 1.5;
+          return !f.leaving || (h.x > -m && h.x < W + m && h.y > -m && h.y < H + m);
+        });
 
         if (t > nextRipple) {
           const f = fish[(Math.random() * fish.length) | 0];
@@ -785,6 +1166,141 @@
       }
     };
 
+
+
+    /**
+     * mini-game "Koi Feast": scatter food and the koi race for it, growing as they eat.
+     * Every ninth pellet is glitched and corrupts whoever eats it; feed enough and
+     * a golden koi glides in. Feed the golden one for a wish.
+     */
+
+    let feast = null;
+
+    function addRipple(x, y, size, str) {
+      ripples.push({ x, y, age: 0, life: 2, size, str });
+    }
+
+    function spawnGolden(g) {
+      const f = makeKoi(g, { base: 'gold', golden: true });
+      // enter from just off the nearest side edge, heading inward
+      const left = Math.random() < 0.5, y = rand(g.H * 0.25, g.H * 0.75);
+      f.h = left ? 0 : Math.PI;
+      f.joints.forEach((p, k) => { p.x = (left ? -40 : g.W + 40) - Math.cos(f.h) * k * f.seg; p.y = y; });
+      f.z = 1;
+      f.born = feast.time;
+      fish.push(f);
+      feast.golden = f;
+      g.emit({ type: 'flash', text: 'a golden koi appears' });
+      g.sound('chime', { notes: g.key().map(n => n + 24).slice(0, 3), gap: 0.12, vol: 0.06, decay: 2 });
+    }
+
+    S.toy = {
+
+      start(g) {
+        food = [];
+        feast = { score: 0, dropped: 0, last: 0, time: 0, golden: null, nextGolden: 15 };
+        g.emit({ type: 'score', value: 0 });
+      },
+
+      stop() {
+        food = [];
+        if (feast && feast.golden) feast.golden.leaving = true;
+        feast = null;
+      },
+
+      drop(g, x, y) {
+        if (food.length > 45) return;
+        feast.dropped++;
+        const glitch = feast.dropped % 9 === 0;
+        food.push({ x, y, age: 0, glitch, vx: rand(-4, 4), vy: rand(-4, 4) });
+        addRipple(x, y, 34, 0.45);
+        g.sound('plop');
+      },
+
+      down(g, x, y) {
+        feast.last = performance.now();
+        this.drop(g, x, y);
+      },
+
+      // dragging scatters a trail of pellets
+      move(g, x, y, e) {
+        if (!e.buttons) return;
+        const now = performance.now();
+        if (now - feast.last < 110) return;
+        feast.last = now;
+        this.drop(g, x + rand(-10, 10), y + rand(-10, 10));
+      },
+
+      update(g, t, dt) {
+        const R = S.pal.ranges, { V, P, G } = g;
+        feast.time = t;
+
+        for (const f of fish) {
+          if (f.glitch > 0) { f.glitch -= dt; f.gseed = Math.floor(t * 12); }
+          const head = f.joints[0], reach = 12 + f.L * 0.06;
+          for (let n = food.length - 1; n >= 0; n--) {
+            const p = food[n];
+            if (Math.hypot(p.x - head.x, p.y - head.y) > reach) continue;
+            food.splice(n, 1);
+            // eating makes a koi grow, up to half again its size
+            f.L = Math.min(f.L0 * 1.5, f.L * 1.035);
+            f.seg = f.L / (f.N - 1);
+            addRipple(head.x, head.y, 26, 0.35);
+            let gain = 1;
+            if (p.glitch) {
+              f.glitch = 3.2;
+              gain = 3;
+              g.sound('glitch');
+              g.emit({ type: 'flash', text: 'g̷l̷i̷t̷c̷h̷e̷d̷ · +3' });
+            } else {
+              g.sound('gulp', { pitch: 1.6 - f.L / f.L0 * 0.5 });
+            }
+            if (f.type.golden && !f.leaving) {
+              gain = 10;
+              f.leaving = true;
+              g.emit({ type: 'flash', text: 'wish granted · +10' });
+              g.sound('chime', { notes: g.key().map(n => n + 12).concat([g.key()[0] + 36]), gap: 0.08, vol: 0.07, decay: 2.2, verb: 0.6 });
+            }
+            feast.score += gain;
+            g.emit({ type: 'score', value: feast.score });
+            break;
+          }
+        }
+
+        // the golden koi turns up once enough has been eaten, and leaves if ignored
+        if (!feast.golden && feast.score >= feast.nextGolden) { spawnGolden(g); feast.nextGolden += 30; }
+        const gk = feast.golden;
+        if (gk) {
+          if (!gk.leaving && t - gk.born > 25) gk.leaving = true;
+          if (!fish.includes(gk)) {
+            feast.golden = null;
+          } else {
+            for (let k = 0; k < gk.N; k += 3) {
+              g.disc(gk.rp[k].x, gk.rp[k].y, gk.wid[k] * 2.4 + 8, (c, dx, dy, d) => g.max(c, 0.28 * (1 - d / (gk.wid[k] * 2.4 + 8)), pi(R.gold, 0.6)));
+            }
+          }
+        }
+
+        // pellets float, drift and slowly dissolve
+        for (let n = food.length - 1; n >= 0; n--) {
+          const p = food[n];
+          p.age += dt;
+          if (p.age > 16) { food.splice(n, 1); continue; }
+          p.x += p.vx * dt; p.y += p.vy * dt;
+          p.vx *= Math.exp(-0.5 * dt); p.vy *= Math.exp(-0.5 * dt);
+          const k = g.at(p.x, p.y);
+          if (k < 0) continue;
+          const fade = 1 - p.age / 16;
+          if (p.glitch) {
+            const h = hash2(k, Math.floor(t * 14));
+            V[k] = 0.8; P[k] = pi(R.neon, h); G[k] = h < 0.5 ? 13 : 12;
+          } else {
+            V[k] = 0.4 + 0.3 * fade; P[k] = pi(R.food, 0.4 + 0.6 * fade); G[k] = 0;
+          }
+        }
+      }
+    };
+
     return S;
   }
 
@@ -796,7 +1312,7 @@
 
   function reefScene() {
 
-    let reefTop, corals, snow, jellies;
+    let reefTop, corals, snow, jellies, baseJellies = 3;
     const JELLY_GROUPS = ['jp', 'jc', 'ja', 'jp', 'jc'];
 
     function branch(segs, x, y, a, len, w, depth) {
@@ -869,11 +1385,12 @@
           const gr = Math.hypot(gx, gy * 1.3);
           v += 0.4 * Math.exp(-Math.pow((gr - 0.32) / 0.11, 2)) * (0.45 + 0.55 * Math.cos(Math.atan2(gy, gx) * 4 + j.seed));
           if (ly2 > -2) v = Math.max(v, 0.8);
-          v = Math.min(1, v);
+          v = Math.min(1, v + (j.flash || 0) * 0.5);
           V[k] = v; P[k] = pi(Rg, 0.2 + v * 0.8); G[k] = 0;
-        } else if (ly2 < rim + 10) {
-          const ex = Math.sqrt(e) - 1;
-          if (ex < 0.6) g.max(k, 0.24 * Math.pow(1 - ex / 0.6, 2), pi(Rg, 0.25));
+        } else if (ly2 < rim + 10 + (j.flash || 0) * 20) {
+          // soft halo, flaring when the jelly has just been lit
+          const ex = Math.sqrt(e) - 1, reach = 0.6 + (j.flash || 0) * 0.9;
+          if (ex < reach) g.max(k, (0.24 + (j.flash || 0) * 0.4) * Math.pow(1 - ex / reach, 2), pi(Rg, 0.25 + (j.flash || 0) * 0.5));
         }
       });
     }
@@ -893,7 +1410,8 @@
         anem: [['#0a2a30', '#1fb8b0', '#a8fff0'], 6],
         jp: [['#2a0a2e', '#a04ab8', '#ff9cf0', '#fff0ff'], 12],
         jc: [['#04222e', '#1ea8c8', '#9ef6ff', '#f0ffff'], 12],
-        ja: [['#2e1206', '#e07040', '#ffc49a', '#fff4e8'], 12]
+        ja: [['#2e1206', '#e07040', '#ffc49a', '#fff4e8'], 12],
+        void: [['#000000', '#12040c', '#2a0612', '#8a0e1e', '#ff3a3a'], 12]
       },
 
       init(g) {
@@ -926,8 +1444,8 @@
         for (let n = 0; n < ns; n++) snow.push({ x: rand(0, W), y: rand(0, H), vy: rand(5, 14), ph: rand(0, TAU), b: rand(0.15, 0.32) });
 
         jellies = [];
-        const nj = clamp(Math.round(area / 280000), 3, 7);
-        for (let n = 0; n < nj; n++) jellies.push(makeJelly(g, true));
+        baseJellies = clamp(Math.round(area / 280000), 3, 7);
+        for (let n = 0; n < baseJellies; n++) jellies.push(makeJelly(g, true));
       },
 
       frame(g, t, dt) {
@@ -1039,8 +1557,110 @@
           j.vx += (noise2(t * 0.1, j.seed) - 0.5) * 6 * dt;
           j.vx = clamp(j.vx, -10, 10);
           j.x += j.vx * dt; j.y += j.vy * dt;
-          if (j.y < -j.R * (j.tl + 1.5) || j.x < -j.R * 3 || j.x > W + j.R * 3) jellies[n] = makeJelly(g, false);
-          drawJelly(g, j, t, R[j.grp]);
+          if (j.flash) j.flash *= Math.exp(-2.2 * dt);
+          if (j.y < -j.R * (j.tl + 1.5) || j.x < -j.R * 3 || j.x > W + j.R * 3) {
+            // the extra jellies from the game drift away rather than respawning
+            if (!g.play && jellies.length > baseJellies) { jellies.splice(n, 1); n--; continue; }
+            jellies[n] = makeJelly(g, false);
+          }
+          drawJelly(g, j, t, j.void ? R.void : R[j.grp]);
+        }
+      }
+    };
+
+    /**
+     * mini-game "Glow Chain": one spark per round. A pulse of light spreads from the click;
+     * every jellyfish it touches lights up, sings the next note and pulses in turn.
+     * Void jellies swallow the light and end that branch of the chain.
+     */
+
+    let chain = null;
+
+    function newRound() {
+      for (const j of jellies) { j.spent = false; j.void = false; }
+      // a couple of void jellies lurk in every round once the reef is busy enough
+      const pool = jellies.slice().sort(() => Math.random() - 0.5);
+      for (let n = 0; n < Math.min(2, Math.floor(jellies.length / 5)); n++) pool[n].void = true;
+    }
+
+    function addRing(x, y, max, grp, delay) {
+      chain.pending.push({ x, y, max, grp, at: chain.time + delay });
+    }
+
+    S.toy = {
+
+      start(g) {
+        const target = clamp(Math.round(g.W * g.H / 58000), 10, 22);
+        while (jellies.length < target) jellies.push(makeJelly(g, true));
+        chain = { rings: [], pending: [], active: false, count: 0, cool: 0, time: 0, voidSeen: false };
+        newRound();
+        g.emit({ type: 'score', value: 0 });
+      },
+
+      stop() {
+        for (const j of jellies) { j.void = false; j.spent = false; }
+        chain = null;
+      },
+
+      down(g, x, y) {
+        if (chain.active || chain.cool > 0) return;
+        chain.active = true;
+        chain.count = 0;
+        addRing(x, y, 150 * clamp(g.W / 1500, 0.85, 1.15), 'jc', 0);
+        g.sound('chime', { notes: [g.key()[0] + 12], vol: 0.06, decay: 1 });
+      },
+
+      update(g, t, dt) {
+        const R = S.pal.ranges, sc = clamp(g.W / 1500, 0.85, 1.15);
+        chain.time = t;
+        chain.cool -= dt;
+
+        for (let n = chain.pending.length - 1; n >= 0; n--) {
+          const p = chain.pending[n];
+          if (t < p.at) continue;
+          chain.pending.splice(n, 1);
+          chain.rings.push({ x: p.x, y: p.y, max: p.max, grp: p.grp, age: 0, dur: 0.85 });
+        }
+
+        for (let n = chain.rings.length - 1; n >= 0; n--) {
+          const ring = chain.rings[n];
+          ring.age += dt;
+          if (ring.age > ring.dur) { chain.rings.splice(n, 1); continue; }
+          const f = ring.age / ring.dur, r = ring.max * (1 - Math.pow(1 - f, 3));
+
+          g.disc(ring.x, ring.y, r + 5, (k, dx, dy, d) => {
+            const band = 1 - Math.abs(d - r) / 5;
+            if (band > 0) g.max(k, (0.85 * (1 - f) + 0.1) * band, pi(R[ring.grp], 0.5 + 0.5 * (1 - f)));
+          });
+
+          // light reaching a jellyfish's bell sets it off
+          for (const j of jellies) {
+            if (j.spent) continue;
+            const bx = j.x, by = j.y - j.R * 0.35;
+            if (Math.hypot(bx - ring.x, by - ring.y) > r + j.R * 0.5) continue;
+            j.spent = true;
+            j.flash = 1;
+            if (j.void) {
+              g.sound('void');
+              if (!chain.voidSeen) { chain.voidSeen = true; g.emit({ type: 'flash', text: 'the void hungers' }); }
+              continue;
+            }
+            chain.count++;
+            j.vy -= 30;
+            g.sound('chime', { notes: [scaleNote(g.key(), chain.count - 1) + 12], vol: 0.075, decay: 1.6, verb: 0.55 });
+            // reach tuned so each pulse finds about two neighbours: chains run, but aim still matters
+            addRing(bx, by, (150 + j.R * 1.5) * sc, j.grp, 0.12);
+          }
+        }
+
+        // the round ends once the last ring fades
+        if (chain.active && !chain.rings.length && !chain.pending.length) {
+          chain.active = false;
+          chain.cool = 0.9;
+          const n = chain.count;
+          g.emit({ type: 'score', value: n });
+          g.emit({ type: 'flash', text: n >= 10 ? `chain of ${n} · the reef sings` : n >= 5 ? `chain of ${n} · lovely` : n ? `chain of ${n}` : 'nothing caught the light' });
+          setTimeout(() => { if (chain) newRound(); }, 600);
         }
       }
     };
@@ -1066,7 +1686,16 @@
       this.grid.mouse = this.mouse;
       this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       this.last = 0;
+      this.play = false;
+      this.looping = false;
       this.loop = this.loop.bind(this);
+
+      // what the mini-games can reach: the HUD, the sound effects and the music's key
+      this.grid.play = false;
+      this.grid.touch = window.matchMedia('(pointer: coarse)').matches;
+      this.grid.emit = (e) => { if (this.onToy) this.onToy(e); };
+      this.grid.sound = (name, opts) => { if (window.portfolioMusic) window.portfolioMusic.sfx(name, opts); };
+      this.grid.key = () => window.portfolioMusic ? window.portfolioMusic.keyNotes(this.name) : [62, 69, 73, 76, 78];
 
       this.resize();
 
@@ -1077,7 +1706,39 @@
       window.addEventListener('pointermove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; }, { passive: true });
       document.addEventListener('pointerleave', () => { this.mouse.x = this.mouse.y = -9999; });
 
-      if (!this.reduced) requestAnimationFrame(this.loop);
+      // the canvas only receives pointers while a scene is being played
+      const toy = (type) => (e) => {
+        const t = this.play && this.scene && this.scene.toy;
+        if (!t || !t[type]) return;
+        this.mouse.x = e.clientX; this.mouse.y = e.clientY;
+        if (type === 'down') {
+          try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* pointer already gone */ }
+        }
+        t[type](this.grid, e.clientX, e.clientY, e);
+      };
+      this.canvas.addEventListener('pointerdown', toy('down'));
+      this.canvas.addEventListener('pointermove', toy('move'));
+      this.canvas.addEventListener('pointerup', toy('up'));
+
+      this.startLoop();
+    }
+
+    startLoop() {
+      if (this.looping || (this.reduced && !this.play)) return;
+      this.looping = true;
+      requestAnimationFrame(this.loop);
+    }
+
+    // the scene's mini-game: info for the HUD, and switching it on or off
+    toyInfo(name) {
+      return TOYS[name];
+    }
+
+    setPlay(on) {
+      this.play = this.grid.play = on;
+      const s = this.scene;
+      if (s && s.toy) s.toy[on ? 'start' : 'stop'](this.grid);
+      this.startLoop();
     }
 
     resize() {
@@ -1134,6 +1795,7 @@
         s.init(this.grid);
         this.buildAtlas(s);
         s.ready = true;
+        if (this.play && s.toy) s.toy.start(this.grid);
       }
       this.name = name;
       this.scene = s;
@@ -1160,6 +1822,7 @@
     }
 
     loop(now) {
+      if (this.reduced && !this.play) { this.looping = false; return; }
       requestAnimationFrame(this.loop);
       if (now - this.last < 1000 / FPS) return;
       const dt = Math.min(0.1, (now - this.last) / 1000);
@@ -1171,6 +1834,7 @@
       const g = this.grid, s = this.scene;
       g.clear();
       s.frame(g, t, dt);
+      if (this.play && s.toy) s.toy.update(g, t, dt);
 
       const cw = this.cwD, ch = this.chD;
       const Wd = this.canvas.width, Hd = this.canvas.height;

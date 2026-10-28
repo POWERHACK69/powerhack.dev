@@ -645,6 +645,46 @@
       });
     },
 
+    // the frog (and the koi) swallowing: a quick downward gloop; pitch < 1 for a burp
+    gulp(m, { pitch = 1 }) {
+      const c = m.ctx, t = c.currentTime, g = c.createGain(), dur = 0.16 / Math.sqrt(pitch);
+      strike(g, t, 0.3, dur);
+      const o = osc(c, 'sine', 420 * pitch, t, t + dur + 0.05);
+      o.frequency.exponentialRampToValueAtTime(130 * pitch, t + dur * 0.8);
+      o.connect(g).connect(m.sfxOut(rand(-0.2, 0.2), 0.1));
+    },
+
+    // something small landing on water
+    plop(m) {
+      const c = m.ctx, t = c.currentTime, g = c.createGain();
+      strike(g, t, 0.24, 0.13);
+      const o = osc(c, 'sine', 950, t, t + 0.16);
+      o.frequency.exponentialRampToValueAtTime(320, t + 0.07);
+      o.connect(g).connect(m.sfxOut(rand(-0.3, 0.3), 0.3));
+    },
+
+    // corrupted data: a stutter of random square-wave blips
+    glitch(m) {
+      const c = m.ctx, t = c.currentTime, out = m.sfxOut(0, 0.1);
+      for (let n = 0; n < 7; n++) {
+        const at = t + n * 0.035, g = c.createGain();
+        strike(g, at, 0.07, 0.03);
+        osc(c, 'square', rand(180, 1600), at, at + 0.04).connect(g).connect(out);
+      }
+    },
+
+    // something vast and low, for the void and the watching sky
+    void(m) {
+      const c = m.ctx, t = c.currentTime, out = m.sfxOut(0, 0.6), g = c.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.28, t + 0.15);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+      for (const [f, type] of [[55, 'sine'], [58.3, 'sine'], [110, 'triangle']]) {
+        osc(c, type, f, t, t + 1.9).connect(gainAt(c, t, type === 'sine' ? 1 : 0.25)).connect(g);
+      }
+      g.connect(out);
+    },
+
     // airy swoosh for the sidebar opening (up) or closing (down)
     swoosh(m, { up }) {
       const c = m.ctx, t = c.currentTime, dur = 0.32;
@@ -792,6 +832,8 @@
         const el = e.target.closest('a, button, .skill-label');
         if (!el || el.disabled || el.closest('[data-music-toggle]')) return;
 
+        // scene mode makes its own swoosh when the current tab is clicked again
+        if (e.sceneToggle) return;
         if (el.matches('[data-nav-link]')) {
           // a rising pair from the destination piece's key
           const page = el.textContent.trim().toLowerCase();

@@ -44,6 +44,28 @@
   </button>
 
   <!--
+    - scene mode: the background's mini-game, shown when the current tab is clicked again
+  -->
+  <section class="scene-hud" data-scene-hud aria-label="Scene game" hidden>
+    <div class="scene-hud-info">
+      <h2 class="scene-hud-title" data-hud-title></h2>
+      <p class="scene-hud-hint" data-hud-hint></p>
+    </div>
+    <p class="scene-hud-score" aria-live="polite">
+      <span class="scene-hud-value" data-hud-score>0</span>
+      <span class="scene-hud-unit" data-hud-unit></span>
+      <span class="scene-hud-best" data-hud-best></span>
+    </p>
+    <button class="scene-hud-back" type="button" data-scene-exit>Back to page</button>
+  </section>
+
+  <p class="scene-flash" data-scene-flash aria-live="polite"></p>
+
+  <button class="scene-hint" type="button" data-scene-hint hidden>
+    Psst… click <strong data-hint-page>About</strong> again to clear the page and play with the scene.
+  </button>
+
+  <!--
     - #MAIN
   -->
 
@@ -1418,6 +1440,7 @@
   -->
   <script src="./assets/js/ascii-bg.js"></script>
   <script src="./assets/js/music.js"></script>
+  <script src="./assets/js/scene-mode.js"></script>
   <script src="./assets/js/script.js"></script>
 
   <!--
