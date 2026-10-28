@@ -1193,6 +1193,10 @@ main {
   visibility: visible;
 }
 
+/* main is its own stacking context (z-index: 1), so lift it while a skill card is open
+   or the card slides under the fixed music button on phones */
+main:has(.skill-explanation.visible) { z-index: 12; }
+
 .skill-explanation-title {
   color: var(--orange-yellow-crayola);
   font-weight: var(--fw-500);
