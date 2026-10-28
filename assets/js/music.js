@@ -12,7 +12,9 @@
   const MUSIC_VOLUME = 0.34; // master level for the soundtrack, kept well under the page
   const SFX_VOLUME = 0.45;   // interaction sounds, on their own bus beside the music
   const FADE = 3.2;          // crossfade length in seconds
-  const LOOKAHEAD = 0.3;     // schedule bars this far ahead of the playhead
+  const RENDER_RATE = 24000; // sample rate the loops are pre-rendered at (plenty for soft ambient music)
+  const TAIL = 6.5;          // seconds of reverb/echo tail carried past each rendered section
+  const SECTIONS = 4;        // each loop renders as this many sections at once, on separate threads
   const STORAGE_KEY = 'portfolio-music';
 
 
@@ -456,7 +458,36 @@
 
 
   /**
-   * one playing instance of a piece, with its own buses so it can fade on its own
+   * shared audio building blocks
+   */
+
+  // a long, soft hall built from decaying stereo noise
+  function makeReverb(c, seconds) {
+    const verb = c.createConvolver();
+    const len = Math.floor(c.sampleRate * seconds), ir = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      let prev = 0;
+      for (let i = 0; i < len; i++) {
+        prev = prev * 0.6 + (Math.random() * 2 - 1) * 0.4;
+        d[i] = prev * Math.pow(1 - i / len, 3.2);
+      }
+    }
+    verb.buffer = ir;
+    return verb;
+  }
+
+  function makeNoise(c) {
+    const buf = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+
+
+  /**
+   * one piece, scheduled into an offline context, with its own dry, reverb and echo buses
    */
 
   class Player {
@@ -468,16 +499,10 @@
       this.spb = 60 / def.bpm;
       this.barLen = this.spb * 4;
 
-      // dry and reverb paths fade together
-      this.fade = c.createGain();
-      this.fadeWet = c.createGain();
-      this.fade.connect(engine.bus);
-      this.fadeWet.connect(engine.reverb);
-
       this.dry = c.createGain();
       this.wet = c.createGain();
-      this.dry.connect(this.fade);
-      this.wet.connect(this.fadeWet);
+      this.dry.connect(engine.bus);
+      this.wet.connect(engine.reverb);
 
       // tempo-synced echo, darkened a little on each repeat
       this.echo = c.createGain();
@@ -488,10 +513,10 @@
       tone.frequency.value = 2600;
       this.echo.connect(delay);
       delay.connect(tone).connect(fb).connect(delay);
-      tone.connect(this.fade);
-      tone.connect(gainAt(c, 0, 0.4)).connect(this.fadeWet);
+      tone.connect(engine.bus);
+      tone.connect(gainAt(c, 0, 0.4)).connect(engine.reverb);
 
-      // events grouped by bar for quick scheduling
+      // events grouped by bar
       this.byBar = Array.from({ length: def.bars }, () => []);
       for (const ev of def.compose()) this.byBar[Math.floor(ev.b / 4) % def.bars].push(ev);
     }
@@ -505,26 +530,9 @@
       return pan;
     }
 
-    start(now) {
-      this.t0 = now + 0.15;
-      this.nextBar = 0;
-      this.endAt = 0;
-      for (const g of [this.fade, this.fadeWet]) {
-        g.gain.setValueAtTime(0, now);
-        g.gain.linearRampToValueAtTime(1, now + FADE + 0.4);
-      }
-      this.startBed(now);
-    }
-
-    stop(now) {
-      if (this.endAt) return;
-      this.endAt = now + FADE;
-      for (const g of [this.fade, this.fadeWet]) {
-        g.gain.cancelScheduledValues(now);
-        g.gain.setValueAtTime(g.gain.value, now);
-        g.gain.linearRampToValueAtTime(0, this.endAt);
-      }
-      if (this.bed) this.bed.stop(this.endAt + 0.1);
+    // bars [first, first + count), with bar `first` starting at time 0
+    scheduleBars(first, count) {
+      for (let n = first; n < first + count; n++) this.scheduleBar(n, (n - first) * this.barLen);
     }
 
     startBed(now) {
@@ -542,31 +550,6 @@
       g.connect(this.dry);
       g.connect(gainAt(c, now, 0.5)).connect(this.wet);
       src.start(now);
-      this.bed = src;
-      this.bedLfo = lfo;
-    }
-
-    // cut this instance out of the graph for good
-    kill() {
-      if (this.bedLfo) this.bedLfo.stop();
-      if (this.bed) this.bed.stop();
-      this.fade.disconnect();
-      this.fadeWet.disconnect();
-    }
-
-    // returns false once the piece has faded out completely
-    tick(now) {
-      if (this.endAt && now > this.endAt + 0.5) {
-        this.kill();
-        return false;
-      }
-      while (true) {
-        const barStart = this.t0 + this.nextBar * this.barLen;
-        if (barStart > now + LOOKAHEAD || (this.endAt && barStart > this.endAt)) break;
-        this.scheduleBar(this.nextBar, barStart);
-        this.nextBar++;
-      }
-      return true;
     }
 
     scheduleBar(n, barStart) {
@@ -583,6 +566,54 @@
       inst(this, Math.max(this.ctx.currentTime, t + (loose ? rand(0, 0.012) : 0)), mtof(ev.m), ev.i === 'pad' || ev.i === 'bass' ? ev.d * this.spb : ev.d, v, ev);
     }
 
+  }
+
+  // one offline render: either a run of bars, or (with `bed`) the whole loop's ambience bed
+  async function renderSection(def, seconds, schedule) {
+    const off = new OfflineAudioContext(2, Math.round(seconds * RENDER_RATE), RENDER_RATE);
+    const bus = off.createGain();
+    bus.connect(off.destination);
+    const reverb = makeReverb(off, 3.5);
+    reverb.connect(gainAt(off, 0, 0.55)).connect(bus);
+    schedule(new Player({ ctx: off, bus, reverb, noise: makeNoise(off) }, def));
+    return off.startRendering();
+  }
+
+  /**
+   * Render a piece once into a seamless looping buffer. Synthesising every note live was
+   * too much for phones and lower-end devices (the audio thread fell behind and crackled);
+   * a pre-rendered loop costs almost nothing to play back.
+   *
+   * The bars are split into sections rendered in parallel, each carrying its reverb and echo
+   * tail past its end; the tails overlap into the next section, and the last one wraps
+   * around onto the start so the loop has no seam.
+   */
+  async function renderLoop(def) {
+    const barLen = 4 * 60 / def.bpm, loopLen = def.bars * barLen;
+    const per = Math.ceil(def.bars / SECTIONS);
+    const jobs = [];
+    for (let first = 0; first < def.bars; first += per) {
+      const count = Math.min(per, def.bars - first);
+      jobs.push(renderSection(def, count * barLen + TAIL, (pl) => pl.scheduleBars(first, count))
+        .then((buffer) => ({ buffer, offset: first * barLen, tail: true })));
+    }
+    jobs.push(renderSection(def, loopLen, (pl) => pl.startBed(0)).then((buffer) => ({ buffer, offset: 0, tail: false })));
+    const parts = await Promise.all(jobs);
+
+    const frames = Math.round(loopLen * RENDER_RATE), fade = Math.round(0.5 * RENDER_RATE);
+    const loop = new AudioBuffer({ numberOfChannels: 2, length: frames, sampleRate: RENDER_RATE });
+    for (let ch = 0; ch < 2; ch++) {
+      const dst = loop.getChannelData(ch);
+      for (const { buffer, offset, tail } of parts) {
+        const src = buffer.getChannelData(ch), at = Math.round(offset * RENDER_RATE), n = src.length;
+        for (let i = 0; i < n; i++) {
+          // ease out the very end of each tail so nothing is ever cut off mid-ring
+          const g = tail && i > n - fade ? (n - i) / fade : 1;
+          dst[(at + i) % frames] += src[i] * g;
+        }
+      }
+    }
+    return loop;
   }
 
 
@@ -720,8 +751,8 @@
       this.label = button.querySelector('[data-music-label]');
       this.enabled = false;
       this.song = null;
-      this.players = [];
-      this.current = null;
+      this.current = null;     // { name, src, gain } of the loop that is playing
+      this.loops = new Map();  // rendered loops by song name (promises), most recent last
       this.gamesOpened = false;
       this.optOut = false;
 
@@ -755,8 +786,13 @@
     }
 
     setup() {
-      const c = this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // 'balanced' trades a few milliseconds of latency for steadier audio on slower devices
+      const AC = window.AudioContext || window.webkitAudioContext;
+      let c;
+      try { c = new AC({ latencyHint: 'balanced' }); } catch (e) { c = new AC(); }
+      this.ctx = c;
 
+      // the music loops arrive pre-mixed; a gentle compressor and the master level shape them
       this.master = c.createGain();
       this.master.gain.value = 0;
       const comp = c.createDynamicsCompressor();
@@ -764,22 +800,8 @@
       comp.ratio.value = 3;
       comp.attack.value = 0.02;
       comp.release.value = 0.4;
-      this.bus = c.createGain();
-      this.bus.connect(comp).connect(this.master).connect(c.destination);
-
-      // a long, soft hall built from decaying stereo noise
-      this.reverb = c.createConvolver();
-      const len = Math.floor(c.sampleRate * 4.5), ir = c.createBuffer(2, len, c.sampleRate);
-      for (let ch = 0; ch < 2; ch++) {
-        const d = ir.getChannelData(ch);
-        let prev = 0;
-        for (let i = 0; i < len; i++) {
-          prev = prev * 0.6 + (Math.random() * 2 - 1) * 0.4;
-          d[i] = prev * Math.pow(1 - i / len, 3.2);
-        }
-      }
-      this.reverb.buffer = ir;
-      this.reverb.connect(gainAt(c, 0, 0.55)).connect(this.bus);
+      this.musicBus = c.createGain();
+      this.musicBus.connect(comp).connect(this.master).connect(c.destination);
 
       // sound effects skip the music's fades and level, with a light compressor of their own
       const sfxComp = c.createDynamicsCompressor();
@@ -789,11 +811,35 @@
       this.sfxBus.gain.value = SFX_VOLUME;
       this.sfxBus.connect(sfxComp).connect(c.destination);
 
-      this.noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
-      const nd = this.noise.getChannelData(0);
-      for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+      // a short, cheap room for the sound effects
+      this.reverb = makeReverb(c, 1.6);
+      this.reverb.connect(gainAt(c, 0, 0.5)).connect(this.sfxBus);
 
-      this.timer = setInterval(() => this.tick(), 50);
+      this.noise = makeNoise(c);
+    }
+
+    // the rendered loop for a piece, rendering it the first time; only the last two are kept
+    loadLoop(name) {
+      let p = this.loops.get(name);
+      if (p) {
+        this.loops.delete(name);
+      } else {
+        p = renderLoop(SONGS[name]);
+      }
+      this.loops.set(name, p);
+      while (this.loops.size > 2) this.loops.delete(this.loops.keys().next().value);
+      return p;
+    }
+
+    fadeOut(track, seconds) {
+      const now = this.ctx.currentTime, g = track.gain.gain;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(0, now + seconds);
+      setTimeout(() => {
+        track.src.stop();
+        track.gain.disconnect();
+      }, (seconds + 0.2) * 1000);
     }
 
     // sound effects follow the sound toggle, so nobody gets surprise noises
@@ -861,12 +907,6 @@
       }, true);
     }
 
-    tick() {
-      if (!this.ctx || this.ctx.state !== 'running') return;
-      const now = this.ctx.currentTime;
-      this.players = this.players.filter((p) => p.tick(now));
-    }
-
     setSong(name) {
       if (!SONGS[name]) return;
       const changed = name !== this.song;
@@ -875,13 +915,25 @@
       this.render(changed && this.enabled);
     }
 
+    // the old piece keeps playing while the new one renders, then they crossfade
     playCurrent() {
-      const now = this.ctx.currentTime;
-      if (this.current) this.current.stop(now);
-      this.current = new Player(this, SONGS[this.song]);
-      this.current.start(now);
-      this.players.push(this.current);
-      this.tick();
+      const name = this.song, wanted = { name };
+      this.wanted = wanted;
+      if (!this.current) { this.tuning = true; this.render(); }
+      this.loadLoop(name).then((buffer) => {
+        if (this.tuning) { this.tuning = false; this.render(); }
+        if (this.wanted !== wanted || !this.enabled) return;
+        const c = this.ctx, now = c.currentTime;
+        const gain = c.createGain(), src = c.createBufferSource();
+        src.buffer = buffer;
+        src.loop = true;
+        src.connect(gain).connect(this.musicBus);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(1, now + FADE + 0.4);
+        src.start(now);
+        if (this.current) this.fadeOut(this.current, FADE);
+        this.current = { name, src, gain };
+      });
     }
 
     enable() {
@@ -891,10 +943,8 @@
         const n = this.keyNotes();
         this.sfx('chime', { notes: [n[0] + 12, n[2] + 12, n[4] + 12], gap: 0.09, vol: 0.07 });
       });
-      // drop any tail left over from when music was switched off mid-fade
-      for (const p of this.players) p.kill();
-      this.players = [];
-      this.current = null;
+      // drop anything left over from when music was switched off mid-fade
+      if (this.current) { this.fadeOut(this.current, 0.05); this.current = null; }
       const now = this.ctx.currentTime;
       this.master.gain.cancelScheduledValues(now);
       this.master.gain.setValueAtTime(this.master.gain.value, now);
@@ -912,8 +962,8 @@
       this.master.gain.cancelScheduledValues(now);
       this.master.gain.setValueAtTime(this.master.gain.value, now);
       this.master.gain.linearRampToValueAtTime(0, now + 0.8);
-      for (const p of this.players) p.stop(now);
-      this.current = null;
+      if (this.current) { this.fadeOut(this.current, 0.8); this.current = null; }
+      this.wanted = null;
       setTimeout(() => { if (!this.enabled) this.ctx.suspend(); }, 900);
       this.writePref(false);
       this.render();
@@ -942,7 +992,7 @@
       this.button.classList.toggle('is-playing', on);
       this.button.setAttribute('aria-pressed', String(on));
       this.button.setAttribute('aria-label', on ? `Pause music (now playing ${SONGS[this.song].title})` : 'Play music');
-      const text = on ? SONGS[this.song].title : 'Play music';
+      const text = on ? (this.tuning ? 'Tuning up…' : SONGS[this.song].title) : 'Play music';
       if (this.label.textContent === text) return;
       if (announce) {
         // slide the new title in

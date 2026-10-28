@@ -501,13 +501,32 @@
 
     let st = null;
 
+    // the eye's size and centre; it is drawn larger on narrow screens so its gaze reads on a phone
+    function eyeShape(g) {
+      const rx = Math.min(g.W * (g.W < 700 ? 0.34 : 0.2), 230);
+      return { rx, ex: g.W / 2, ey: g.H * 0.24 };
+    }
+
+    // ease the gaze toward the last place the visitor pointed or tapped
+    function updateGaze(g, dt) {
+      const { rx, ex, ey } = eyeShape(g), lp = g.lastPoint;
+      let gx = 0, gy = 0;
+      if (lp.x > -999) {
+        const dx = lp.x - ex, dy = lp.y - ey, d = Math.hypot(dx, dy) || 1;
+        const amt = Math.min(1, d / (rx * 1.2));
+        gx = dx / d * rx * 0.42 * amt;
+        gy = dy / d * rx * 0.22 * amt;
+      }
+      const k = Math.min(1, dt * 6);
+      st.gaze.x += (gx - st.gaze.x) * k;
+      st.gaze.y += (gy - st.gaze.y) * k;
+    }
+
     function drawEye(g, R, o, t) {
-      const { W, H, V, P, G } = g;
-      const rx = Math.min(W * 0.2, 230), ry = rx * 0.4 * o, ex = W / 2, ey = H * 0.24;
+      const { V, P, G } = g;
+      const { rx, ex, ey } = eyeShape(g), ry = rx * 0.4 * o;
       if (ry < 2) return;
-      const mx = g.mouse.x - ex, my = g.mouse.y - ey, md = Math.hypot(mx, my) || 1;
-      const look = Math.min(rx * 0.3, md * 0.15);
-      const ix = ex + mx / md * look, iy = ey + my / md * look * 0.45;
+      const ix = ex + st.gaze.x, iy = ey + st.gaze.y;
       const ri = rx * 0.36, rp = ri * (0.4 + 0.1 * Math.sin(t * 1.7));
       const rim = g.ch * 0.7;
       g.disc(ex, ey, rx + 4, (k, dx, dy) => {
@@ -533,7 +552,7 @@
     S.toy = {
 
       start() {
-        st = { stars: [], bursts: [], combo: 0, mult: 1, catches: 0, next: 0, eye: null, time: 0 };
+        st = { stars: [], bursts: [], combo: 0, mult: 1, catches: 0, next: 0, eye: null, time: 0, gaze: { x: 0, y: 0 } };
       },
 
       stop() { st = null; boost = 0; },
@@ -605,6 +624,7 @@
         boost += (Math.min(1.1, st.combo * 0.14) - boost) * Math.min(1, dt * 2);
 
         if (st.eye) {
+          updateGaze(g, dt);
           const e = t - st.eye.t0;
           let o;
           if (e < 0.8) o = e / 0.8;
@@ -796,12 +816,31 @@
     S.toy = {
 
       start(g) {
+        // everything is sized from the screen's short side, so a phone gets a frog that fits its pond
+        const unit = clamp(Math.min(g.W, g.H) / 700, 0.55, 1.1);
+        const size = 30 * Math.max(unit * 1.1, 0.6);
+
+        // every pad must be big enough to sit on, and there must be somewhere to hop to
+        for (const p of pads) p.R = Math.max(p.R, size * 2);
+        const want = clamp(Math.round(g.W * g.H / 45000), 8, 22);
+        for (let n = 0; n < want * 10 && pads.length < want; n++) {
+          const R = rand(size * 2, size * 3.4), x = rand(R, g.W - R), y = rand(R + 60, g.H - R);
+          if (pads.some(p => Math.hypot(p.x - x, p.y - y) < p.R + R + 6)) continue;
+          pads.push(makePad(x, y, R, Math.random() < 0.35));
+        }
+        const wantFlies = clamp(Math.round(g.W * g.H / 20000), 12, 60);
+        while (flies.length < wantFlies) flies.push(makeFly(rand(0, g.W), rand(0, g.H)));
+
         let best = pads[0], bd = Infinity;
         for (const p of pads) {
-          const d = Math.hypot(p.x - g.W / 2, p.y - g.H * 0.7);
+          const d = Math.hypot(p.x - g.W / 2, p.y - g.H * 0.62);
           if (d < bd) { bd = d; best = p; }
         }
-        frog = { pad: best, x: best.x, y: best.y, ang: -Math.PI / 2, size: 30 * Math.max(flyScale, 0.85), growth: 1, lift: 1, tongue: null, hop: null };
+        best.R = Math.max(best.R, size * 2.4);
+        frog = {
+          pad: best, x: best.x, y: best.y, ang: -Math.PI / 2, size, growth: 1, lift: 1, tongue: null, hop: null,
+          reach: clamp(Math.min(g.W, g.H) * 0.62, 170, 320)
+        };
         hunt = { eaten: 0, combo: 0, mult: 1, last: -9, respawn: [], time: 0 };
       },
 
@@ -809,7 +848,7 @@
 
       down(g, x, y) {
         if (frog.hop) return;
-        const reach = 320 * Math.max(flyScale, 0.85) * frog.growth;
+        const reach = frog.reach * frog.growth;
 
         // aim assist: a click near a firefly's glow aims right at that firefly
         let target = null, bd = (g.touch ? 75 : 60) * Math.max(flyScale, 0.85);
@@ -1693,7 +1732,14 @@
         clearTimeout(this.resizeTimer);
         this.resizeTimer = setTimeout(() => this.resize(), 150);
       });
-      window.addEventListener('pointermove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; }, { passive: true });
+      // the last place the visitor pointed or tapped, kept even after a finger lifts
+      this.grid.lastPoint = { x: -9999, y: -9999 };
+      const remember = (e) => {
+        this.mouse.x = this.grid.lastPoint.x = e.clientX;
+        this.mouse.y = this.grid.lastPoint.y = e.clientY;
+      };
+      window.addEventListener('pointermove', remember, { passive: true });
+      window.addEventListener('pointerdown', remember, { passive: true });
       document.addEventListener('pointerleave', () => { this.mouse.x = this.mouse.y = -9999; });
 
       // the canvas only receives pointers while a scene is being played
