@@ -44,26 +44,33 @@
   </button>
 
   <!--
-    - scene mode: the background's mini-game, shown when the current tab is clicked again
+    - easter eggs: text drawn over the background's mini-game
   -->
-  <section class="scene-hud" data-scene-hud aria-label="Scene game" hidden>
-    <div class="scene-hud-info">
-      <h2 class="scene-hud-title" data-hud-title></h2>
-      <p class="scene-hud-hint" data-hud-hint></p>
-    </div>
-    <p class="scene-hud-score" aria-live="polite">
-      <span class="scene-hud-value" data-hud-score>0</span>
-      <span class="scene-hud-unit" data-hud-unit></span>
-      <span class="scene-hud-best" data-hud-best></span>
+  <div class="game-layer" data-game-layer hidden>
+    <p class="game-score" aria-live="polite">
+      <span class="game-score-value" data-game-score>0</span>
+      <span class="game-score-meta">
+        <span class="game-score-unit" data-game-unit></span>
+        <span class="game-mult" data-game-mult>×2</span>
+      </span>
+      <span class="game-return" data-game-return></span>
     </p>
-    <button class="scene-hud-back" type="button" data-scene-exit>Back to page</button>
-  </section>
+    <div class="game-card" data-game-card>
+      <p class="game-card-egg" data-game-egg></p>
+      <h2 class="game-card-title" data-game-title></h2>
+      <p class="game-card-hint" data-game-hint></p>
+    </div>
+  </div>
+
+  <div class="game-floaters" data-game-floaters aria-hidden="true"></div>
 
   <p class="scene-flash" data-scene-flash aria-live="polite"></p>
 
-  <button class="scene-hint" type="button" data-scene-hint hidden>
-    Psst… click <strong data-hint-page>About</strong> again to clear the page and play with the scene.
-  </button>
+  <aside class="egg-notice" data-egg-notice role="status" hidden>
+    <span class="egg-notice-icon" aria-hidden="true">✦</span>
+    <p class="egg-notice-text" data-egg-text></p>
+    <button class="egg-notice-close" type="button" data-egg-close aria-label="Dismiss">×</button>
+  </aside>
 
   <!--
     - #MAIN

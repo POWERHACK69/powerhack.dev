@@ -722,6 +722,8 @@
       this.song = null;
       this.players = [];
       this.current = null;
+      this.gamesOpened = false;
+      this.optOut = false;
 
       button.addEventListener('click', () => this.toggle());
       this.bindSfx();
@@ -917,8 +919,22 @@
       this.render();
     }
 
+    // the visitor's own on/off choice from the toggle
     toggle() {
-      if (this.enabled) this.disable(); else this.enable();
+      if (this.enabled) {
+        // switched off after a game has been opened: no more auto-starting until they turn it back on
+        if (this.gamesOpened) this.optOut = true;
+        this.disable();
+      } else {
+        this.optOut = false;
+        this.enable();
+      }
+    }
+
+    // opening a game brings the music in, unless the visitor has since switched it off
+    startForGame() {
+      this.gamesOpened = true;
+      if (!this.enabled && !this.optOut) this.enable();
     }
 
     render(announce) {

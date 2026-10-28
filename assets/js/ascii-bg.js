@@ -54,14 +54,16 @@
 
 
   /**
-   * mini-games, one per scene; `round` scores keep the best single round, the rest accumulate
+   * mini-games (the site's easter eggs), one per scene. Games report each scoring moment as
+   * { type: 'gain', value, x, y }, plus { type: 'mult', value } for streak multipliers and
+   * { type: 'flash', text } for callouts; the page keeps the running, ever-growing total.
    */
 
   const TOYS = {
-    about: { title: 'Wishing Stars', hint: 'Catch shooting stars before they reach the fjord. Keep a streak going and the sky answers.', unit: 'wishes' },
-    resume: { title: 'Bug Eater: Night Shift', hint: 'Click to snap your tongue. Click a lily pad to hop. Glowing bugs are worth more, and your cursor lures them in.', unit: 'bugs' },
-    portfolio: { title: 'Koi Feast', hint: 'Click or drag to scatter food. Beware glitched pellets, and keep an eye out for the golden koi.', unit: 'fed' },
-    contact: { title: 'Glow Chain', hint: 'One spark per round. Click to set off a chain of jellyfish, and steer clear of the void.', unit: 'chain', round: true }
+    about: { title: 'Wishing Stars', hint: 'Catch the shooting stars before they fall into the fjord', unit: 'wishes' },
+    resume: { title: 'Bug Eater: Night Shift', hint: 'Snap your tongue at the fireflies · click a lily pad to hop · glowing bugs are worth more', unit: 'bugs eaten' },
+    portfolio: { title: 'Koi Feast', hint: 'Click or drag to scatter food for the koi', unit: 'koi fed' },
+    contact: { title: 'Glow Chain', hint: 'One spark per round · light a jellyfish and watch the glow spread · beware the void', unit: 'glow' }
   };
 
   // the k-th step up a scale built from the music's chord tones
@@ -530,9 +532,8 @@
 
     S.toy = {
 
-      start(g) {
-        st = { stars: [], bursts: [], score: 0, combo: 0, catches: 0, next: 0, eye: null, time: 0 };
-        g.emit({ type: 'score', value: 0 });
+      start() {
+        st = { stars: [], bursts: [], combo: 0, mult: 1, catches: 0, next: 0, eye: null, time: 0 };
       },
 
       stop() { st = null; boost = 0; },
@@ -549,12 +550,17 @@
         best.dead = true;
         st.combo++;
         st.catches++;
-        st.score += st.combo >= 3 ? 2 : 1;
+        // streaks climb through multiplier tiers
+        const mult = st.combo >= 10 ? 4 : st.combo >= 6 ? 3 : st.combo >= 3 ? 2 : 1;
+        if (mult !== st.mult) {
+          st.mult = mult;
+          g.emit({ type: 'mult', value: mult });
+          g.emit({ type: 'flash', text: `${st.combo} in a row · ×${mult} wishes` });
+        }
         spawnBurst(st.bursts, best.x, best.y, 18, 170, 0.75, 'fire');
         spawnBurst(st.bursts, best.x, best.y, 10, 80, 1, 'aur');
         g.sound('chime', { notes: [scaleNote(g.key(), st.combo - 1) + 12], vol: 0.09, decay: 1.8, verb: 0.5 });
-        g.emit({ type: 'score', value: st.score });
-        if (st.combo >= 3 && st.combo % 3 === 0) g.emit({ type: 'flash', text: `${st.combo} in a row · double wishes` });
+        g.emit({ type: 'gain', value: mult, x: best.x, y: best.y });
         if (st.catches % 10 === 0) {
           st.eye = { t0: st.time };
           g.emit({ type: 'flash', text: 'the sky is watching' });
@@ -565,7 +571,7 @@
       update(g, t, dt) {
         const { W, H, V, P, G } = g, R = S.pal.ranges;
         st.time = t;
-        const pace = 1 + Math.min(st.score, 60) * 0.015;
+        const pace = 1 + Math.min(st.catches, 60) * 0.015;
 
         if (t > st.next && st.stars.filter(s => !s.dead).length < 4) {
           const right = Math.random() < 0.5;
@@ -585,7 +591,12 @@
           if (s.y > hz || s.x < -80 || s.x > W + 80) {
             // fell into the fjord: the streak breaks
             if (s.y > hz) spawnBurst(st.bursts, s.x, hz + 4, 6, 60, 0.6, 'refl');
+            if (st.mult > 1) {
+              g.emit({ type: 'mult', value: 1 });
+              g.emit({ type: 'flash', text: 'streak lost' });
+            }
             st.combo = 0;
+            st.mult = 1;
             st.stars.splice(n, 1);
             continue;
           }
@@ -791,8 +802,7 @@
           if (d < bd) { bd = d; best = p; }
         }
         frog = { pad: best, x: best.x, y: best.y, ang: -Math.PI / 2, size: 30 * Math.max(flyScale, 0.85), growth: 1, lift: 1, tongue: null, hop: null };
-        hunt = { score: 0, eaten: 0, combo: 0, last: -9, respawn: [], time: 0 };
-        g.emit({ type: 'score', value: 0 });
+        hunt = { eaten: 0, combo: 0, mult: 1, last: -9, respawn: [], time: 0 };
       },
 
       stop() { frog = null; hunt = null; },
@@ -874,23 +884,33 @@
 
           if (tg.len <= 0) {
             frog.tongue = null;
+            const m = mouth();
             for (const c of tg.caught) {
               hunt.combo = t - hunt.last < 2.5 ? hunt.combo + 1 : 1;
               hunt.last = t;
               hunt.eaten++;
-              hunt.score += (c.lit ? 3 : 1) * (hunt.combo >= 4 ? 2 : 1);
-              if (hunt.combo === 4) g.emit({ type: 'flash', text: 'feeding frenzy · double points' });
+              const mult = hunt.combo >= 4 ? 2 : 1;
+              if (mult !== hunt.mult) {
+                hunt.mult = mult;
+                g.emit({ type: 'mult', value: mult });
+                if (mult > 1) g.emit({ type: 'flash', text: 'feeding frenzy · ×2' });
+              }
+              g.emit({ type: 'gain', value: (c.lit ? 3 : 1) * mult, x: m.x, y: m.y - 20 });
               if (hunt.eaten % 12 === 0 && frog.growth < 1.8) {
                 frog.growth *= 1.12;
                 g.emit({ type: 'flash', text: 'BURP.' });
                 g.sound('gulp', { pitch: 0.45 });
               }
             }
-            if (tg.caught.length) {
-              g.sound('gulp', { pitch: tg.caught.some(c => c.lit) ? 1.3 : 1 });
-              g.emit({ type: 'score', value: hunt.score });
-            }
+            if (tg.caught.length) g.sound('gulp', { pitch: tg.caught.some(c => c.lit) ? 1.3 : 1 });
           }
+        }
+
+        // the frenzy cools off if the frog goes hungry for a moment
+        if (hunt.mult > 1 && t - hunt.last > 2.5) {
+          hunt.mult = 1;
+          hunt.combo = 0;
+          g.emit({ type: 'mult', value: 1 });
         }
 
         // fresh fireflies drift in from the edges to replace the eaten ones
@@ -924,9 +944,6 @@
     { base: 'orange' }
   ];
 
-  // colours a glitched koi flickers through
-  const GLITCH_GROUPS = ['neon', 'red', 'gold', 'white', 'fin', 'black'];
-
   function koiScene() {
 
     let fish, pads, ripples, nextRipple, food = [];
@@ -938,7 +955,7 @@
       const joints = [];
       for (let k = 0; k < N; k++) joints.push({ x: x - Math.cos(h) * k * seg, y: y - Math.sin(h) * k * seg });
       return {
-        L, L0: L, N, seg, h, s0: rand(26, 44), s: 30, phase: rand(0, TAU), seed: rand(0, 100), z: rand(0.72, 1), type, glitch: 0,
+        L, L0: L, N, seg, h, s0: rand(26, 44), s: 30, phase: rand(0, TAU), seed: rand(0, 100), z: rand(0.72, 1), type,
         joints, rp: joints.map(p => ({ x: p.x, y: p.y })), wid: new Float32Array(N)
       };
     }
@@ -947,17 +964,15 @@
       const { W, H } = g, head = f.joints[0];
       let want = f.h + (noise2(t * 0.1, f.seed) - 0.5) * 1.6;
       let ax = 0, ay = 0, flee = false, hungry = false;
-      // soft walls just past the screen edges, so turns can be wide arcs (a departing koi ignores them)
+      // soft walls just past the screen edges, so turns can be wide arcs
       const m = f.L * 0.8, e = -f.L * 0.25;
-      if (!f.leaving) {
-        if (head.x < e + m) ax += (e + m - head.x) / m;
-        if (head.x > W - e - m) ax -= (head.x - W + e + m) / m;
-        if (head.y < e + m) ay += (e + m - head.y) / m;
-        if (head.y > H - e - m) ay -= (head.y - H + e + m) / m;
-      }
+      if (head.x < e + m) ax += (e + m - head.x) / m;
+      if (head.x > W - e - m) ax -= (head.x - W + e + m) / m;
+      if (head.y < e + m) ay += (e + m - head.y) / m;
+      if (head.y > H - e - m) ay -= (head.y - H + e + m) / m;
 
       // during the feeding game, head for the nearest pellet
-      if (g.play && food.length && !f.leaving) {
+      if (g.play && food.length) {
         let best = null, bd = 560;
         for (const p of food) {
           const d = Math.hypot(p.x - head.x, p.y - head.y);
@@ -1084,12 +1099,6 @@
           if (type.ink && noise2(bu * 9 + seed * 2, bside * 2 + 3) > type.inkThr) grp = type.ink;
 
           const k = j * cols + i;
-          if (f.glitch > 0) {
-            // corrupted: scales flicker between random colours and drop out in blocks
-            const h = hash2(k, f.gseed);
-            if (h < 0.12) continue;
-            grp = GLITCH_GROUPS[(h * 97 | 0) % GLITCH_GROUPS.length];
-          }
           V[k] = v; P[k] = pi(R[grp], v); G[k] = 0;
         }
       }
@@ -1111,8 +1120,7 @@
         petal: [['#3a0f2a', '#a83a6e', '#ec8cb8', '#ffd6e8', '#fff6fa'], 10],
         seed: [['#5a4206', '#e6b830', '#fff09a'], 4],
         ripple: [['#0e3a50', '#5aa8c8', '#cfefff'], 5],
-        food: [['#4a2a08', '#c0803a', '#ffd08a'], 5],
-        neon: [['#2a0a3a', '#ff2fd0', '#5ff6ff'], 6]
+        food: [['#4a2a08', '#c0803a', '#ffd08a'], 5]
       },
 
       init(g) {
@@ -1146,11 +1154,6 @@
         }
 
         for (const f of fish) steer(f, g, t, dt);
-        // a koi on its way out is gone once it is well past the edge
-        fish = fish.filter((f) => {
-          const h = f.joints[0], m = f.L * 1.5;
-          return !f.leaving || (h.x > -m && h.x < W + m && h.y > -m && h.y < H + m);
-        });
 
         if (t > nextRipple) {
           const f = fish[(Math.random() * fish.length) | 0];
@@ -1183,8 +1186,6 @@
 
     /**
      * mini-game "Koi Feast": scatter food and the koi race for it, growing as they eat.
-     * Every ninth pellet is glitched and corrupts whoever eats it; feed enough and
-     * a golden koi glides in. Feed the golden one for a wish.
      */
 
     let feast = null;
@@ -1193,39 +1194,21 @@
       ripples.push({ x, y, age: 0, life: 2, size, str });
     }
 
-    function spawnGolden(g) {
-      const f = makeKoi(g, { base: 'gold', golden: true });
-      // enter from just off the nearest side edge, heading inward
-      const left = Math.random() < 0.5, y = rand(g.H * 0.25, g.H * 0.75);
-      f.h = left ? 0 : Math.PI;
-      f.joints.forEach((p, k) => { p.x = (left ? -40 : g.W + 40) - Math.cos(f.h) * k * f.seg; p.y = y; });
-      f.z = 1;
-      f.born = feast.time;
-      fish.push(f);
-      feast.golden = f;
-      g.emit({ type: 'flash', text: 'a golden koi appears' });
-      g.sound('chime', { notes: g.key().map(n => n + 24).slice(0, 3), gap: 0.12, vol: 0.06, decay: 2 });
-    }
-
     S.toy = {
 
-      start(g) {
+      start() {
         food = [];
-        feast = { score: 0, dropped: 0, last: 0, time: 0, golden: null, nextGolden: 15 };
-        g.emit({ type: 'score', value: 0 });
+        feast = { last: 0 };
       },
 
       stop() {
         food = [];
-        if (feast && feast.golden) feast.golden.leaving = true;
         feast = null;
       },
 
       drop(g, x, y) {
         if (food.length > 45) return;
-        feast.dropped++;
-        const glitch = feast.dropped % 9 === 0;
-        food.push({ x, y, age: 0, glitch, vx: rand(-4, 4), vy: rand(-4, 4) });
+        food.push({ x, y, age: 0, vx: rand(-4, 4), vy: rand(-4, 4) });
         addRipple(x, y, 34, 0.45);
         g.sound('plop');
       },
@@ -1246,10 +1229,8 @@
 
       update(g, t, dt) {
         const R = S.pal.ranges, { V, P, G } = g;
-        feast.time = t;
 
         for (const f of fish) {
-          if (f.glitch > 0) { f.glitch -= dt; f.gseed = Math.floor(t * 12); }
           const head = f.joints[0], reach = 12 + f.L * 0.06;
           for (let n = food.length - 1; n >= 0; n--) {
             const p = food[n];
@@ -1259,38 +1240,9 @@
             f.L = Math.min(f.L0 * 1.5, f.L * 1.035);
             f.seg = f.L / (f.N - 1);
             addRipple(head.x, head.y, 26, 0.35);
-            let gain = 1;
-            if (p.glitch) {
-              f.glitch = 3.2;
-              gain = 3;
-              g.sound('glitch');
-              g.emit({ type: 'flash', text: 'g̷l̷i̷t̷c̷h̷e̷d̷ · +3' });
-            } else {
-              g.sound('gulp', { pitch: 1.6 - f.L / f.L0 * 0.5 });
-            }
-            if (f.type.golden && !f.leaving) {
-              gain = 10;
-              f.leaving = true;
-              g.emit({ type: 'flash', text: 'wish granted · +10' });
-              g.sound('chime', { notes: g.key().map(n => n + 12).concat([g.key()[0] + 36]), gap: 0.08, vol: 0.07, decay: 2.2, verb: 0.6 });
-            }
-            feast.score += gain;
-            g.emit({ type: 'score', value: feast.score });
+            g.sound('gulp', { pitch: 1.6 - f.L / f.L0 * 0.5 });
+            g.emit({ type: 'gain', value: 1, x: head.x, y: head.y - 16 });
             break;
-          }
-        }
-
-        // the golden koi turns up once enough has been eaten, and leaves if ignored
-        if (!feast.golden && feast.score >= feast.nextGolden) { spawnGolden(g); feast.nextGolden += 30; }
-        const gk = feast.golden;
-        if (gk) {
-          if (!gk.leaving && t - gk.born > 25) gk.leaving = true;
-          if (!fish.includes(gk)) {
-            feast.golden = null;
-          } else {
-            for (let k = 0; k < gk.N; k += 3) {
-              g.disc(gk.rp[k].x, gk.rp[k].y, gk.wid[k] * 2.4 + 8, (c, dx, dy, d) => g.max(c, 0.28 * (1 - d / (gk.wid[k] * 2.4 + 8)), pi(R.gold, 0.6)));
-            }
           }
         }
 
@@ -1304,12 +1256,7 @@
           const k = g.at(p.x, p.y);
           if (k < 0) continue;
           const fade = 1 - p.age / 16;
-          if (p.glitch) {
-            const h = hash2(k, Math.floor(t * 14));
-            V[k] = 0.8; P[k] = pi(R.neon, h); G[k] = h < 0.5 ? 13 : 12;
-          } else {
-            V[k] = 0.4 + 0.3 * fade; P[k] = pi(R.food, 0.4 + 0.6 * fade); G[k] = 0;
-          }
+          V[k] = 0.4 + 0.3 * fade; P[k] = pi(R.food, 0.4 + 0.6 * fade); G[k] = 0;
         }
       }
     };
@@ -1605,9 +1552,8 @@
       start(g) {
         const target = clamp(Math.round(g.W * g.H / 58000), 10, 22);
         while (jellies.length < target) jellies.push(makeJelly(g, true));
-        chain = { rings: [], pending: [], active: false, count: 0, cool: 0, time: 0, voidSeen: false };
+        chain = { rings: [], pending: [], active: false, count: 0, points: 0, cool: 0, time: 0, voidSeen: false };
         newRound();
-        g.emit({ type: 'score', value: 0 });
       },
 
       stop() {
@@ -1619,6 +1565,7 @@
         if (chain.active || chain.cool > 0) return;
         chain.active = true;
         chain.count = 0;
+        chain.points = 0;
         addRing(x, y, 150 * clamp(g.W / 1500, 0.85, 1.15), 'jc', 0);
         g.sound('chime', { notes: [g.key()[0] + 12], vol: 0.06, decay: 1 });
       },
@@ -1659,6 +1606,9 @@
               continue;
             }
             chain.count++;
+            // each link in the chain is worth more than the last
+            chain.points += chain.count;
+            g.emit({ type: 'gain', value: chain.count, x: bx, y: by - j.R * 0.6 });
             j.vy -= 30;
             g.sound('chime', { notes: [scaleNote(g.key(), chain.count - 1) + 12], vol: 0.075, decay: 1.6, verb: 0.55 });
             // reach tuned so each pulse finds about two neighbours: chains run, but aim still matters
@@ -1670,9 +1620,8 @@
         if (chain.active && !chain.rings.length && !chain.pending.length) {
           chain.active = false;
           chain.cool = 0.9;
-          const n = chain.count;
-          g.emit({ type: 'score', value: n });
-          g.emit({ type: 'flash', text: n >= 10 ? `chain of ${n} · the reef sings` : n >= 5 ? `chain of ${n} · lovely` : n ? `chain of ${n}` : 'nothing caught the light' });
+          const n = chain.count, pts = chain.points;
+          g.emit({ type: 'flash', text: n >= 10 ? `chain of ${n} · the reef sings · +${pts}` : n >= 5 ? `chain of ${n} · lovely · +${pts}` : n ? `chain of ${n} · +${pts}` : 'nothing caught the light' });
           setTimeout(() => { if (chain) newRound(); }, 600);
         }
       }

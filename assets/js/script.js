@@ -164,13 +164,16 @@ const pages = document.querySelectorAll("[data-page]");
 for (let i = 0; i < navigationLinks.length; i++) {
   navigationLinks[i].addEventListener("click", function (e) {
 
-    // clicking the tab you're already on clears the panels to play with the scene
+    // clicks on the tab you're already on feed the easter egg (three opens that page's game)
     if (this.classList.contains("active")) {
       e.sceneToggle = true;
-      if (window.sceneMode) window.sceneMode.toggle();
+      if (window.sceneMode) window.sceneMode.tabClick(this);
       return;
     }
-    if (window.sceneMode) window.sceneMode.exit();
+    if (window.sceneMode) {
+      window.sceneMode.exit();
+      window.sceneMode.resetTaps();
+    }
 
     for (let i = 0; i < pages.length; i++) {
       if (this.innerHTML.toLowerCase() === pages[i].dataset.page) {
