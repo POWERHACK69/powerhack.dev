@@ -223,15 +223,28 @@
 
 
 
-  // the notification that slides in on load
+  // the notification: slides in on load on wide screens; on narrower ones, where it would
+  // cover the header, it waits inside the sidebar until the visitor opens the contacts dropdown
 
   let noticeTimer = 0;
+  const sidebar = document.querySelector('[data-sidebar]');
+  const sidebarBtn = document.querySelector('[data-sidebar-btn]');
+  const inDropdown = window.matchMedia('(max-width: 1249px)').matches && sidebar && sidebarBtn;
+
+  function showNotice() {
+    notice.hidden = false;
+    requestAnimationFrame(() => notice.classList.add('is-showing'));
+    noticeTimer = setTimeout(hideNotice, 12000);
+  }
 
   function hideNotice() {
     if (!notice || notice.hidden) return;
     notice.classList.remove('is-showing');
     clearTimeout(noticeTimer);
-    setTimeout(() => { notice.hidden = true; }, 450);
+    setTimeout(() => {
+      notice.hidden = true;
+      if (sidebar) sidebar.classList.remove('has-notice');
+    }, 450);
   }
 
   if (notice) {
@@ -248,12 +261,21 @@
         `${cap(verb)} any tab ${TAPS} times to jump back in and keep your scores climbing 😉`;
     }
     notice.querySelector('[data-egg-close]').addEventListener('click', hideNotice);
-    setTimeout(() => {
-      if (active) return;
-      notice.hidden = false;
-      requestAnimationFrame(() => notice.classList.add('is-showing'));
-      noticeTimer = setTimeout(hideNotice, 12000);
-    }, 1200);
+    if (inDropdown) {
+      notice.classList.add('is-inline');
+      sidebar.querySelector('.contacts-list').before(notice);
+      // script.js toggles the dropdown after this listener runs, so check on the next tick
+      sidebarBtn.addEventListener('click', function reveal() {
+        setTimeout(() => {
+          if (!sidebar.classList.contains('active') || active) return;
+          sidebarBtn.removeEventListener('click', reveal);
+          sidebar.classList.add('has-notice');
+          showNotice();
+        });
+      });
+    } else {
+      setTimeout(() => { if (!active) showNotice(); }, 1200);
+    }
   }
 
   window.sceneMode = { enter, exit, tabClick, resetTaps, get active() { return active; } };

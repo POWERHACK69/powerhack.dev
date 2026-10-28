@@ -587,6 +587,23 @@ body.scene-mode::after { opacity: 0.4; }
 
 .egg-notice-close:hover { color: var(--white-1); }
 
+/* on narrower screens it sits inside the contacts dropdown instead */
+
+.egg-notice.is-inline {
+  position: static;
+  width: auto;
+  margin-bottom: 20px;
+  background: hsla(45, 100%, 72%, 0.06);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  transform: translateY(-8px);
+}
+
+.egg-notice.is-inline.is-showing { transform: none; }
+
+.sidebar.active.has-notice { max-height: 560px; }
+
 /* big centre-screen callouts: streaks, burps, wishes */
 
 .scene-flash {
@@ -1456,8 +1473,10 @@ main {
 
 .skill-percentage {
   display: block;
-  font-size: clamp(0.9rem, 2.5vw, 1.2rem);
-  font-weight: var(--fw-600);
+  font-size: clamp(0.7rem, 1.8vw, 0.85rem);
+  font-weight: var(--fw-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--orange-yellow-crayola);
   margin-top: 3px;
 }
@@ -1493,6 +1512,21 @@ main {
   font-weight: var(--fw-500);
   margin-bottom: 8px;
   font-size: 1rem;
+}
+
+.skill-explanation-evidence {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid hsla(45, 100%, 72%, 0.2);
+  color: var(--white-2);
+}
+
+.skills-note {
+  color: var(--light-gray-70);
+  font-size: var(--fs-8);
+  font-weight: var(--fw-300);
+  line-height: 1.5;
+  max-width: 520px;
 }
 
 .skills-legend {
@@ -1703,7 +1737,9 @@ main {
 .project-item > a:hover img { transform: scale(1.06); }
 
 .project-title,
-.project-category { margin-left: 10px; }
+.project-hook,
+.project-category,
+.project-role { margin-inline: 10px; }
 
 .project-title {
   color: var(--white-2);
@@ -1715,9 +1751,23 @@ main {
   transition: color var(--transition-1);
 }
 
+.project-hook {
+  color: var(--light-gray);
+  font-size: var(--fs-7);
+  font-weight: var(--fw-300);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
 .project-category {
+  color: var(--orange-yellow-crayola);
+  font-size: var(--fs-8);
+  font-weight: var(--fw-400);
+}
+
+.project-role {
   color: var(--light-gray-70);
-  font-size: var(--fs-6);
+  font-size: var(--fs-8);
   font-weight: var(--fw-300);
 }
 
@@ -2037,6 +2087,8 @@ textarea.form-input::-webkit-resizer { display: none; }
   }
 
   .sidebar.active { max-height: 584px; }
+
+  .sidebar.active.has-notice { max-height: 760px; }
 
   .sidebar-info { gap: 25px; }
 

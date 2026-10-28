@@ -196,6 +196,14 @@ for (let i = 0; i < navigationLinks.length; i++) {
 
 
 // JavaScript class with responsiveness functionality
+// skill values are self-assessed and only meaningful relative to each other,
+// so the labels show a tier instead of a raw percentage
+function skillTier(value) {
+  if (value >= 75) return 'Core strength';
+  if (value >= 65) return 'Strong';
+  return 'Collaborative';
+}
+
 class SkillsPentagon {
   constructor(canvasId, labelsId, dataElementId, explanationId) {
     this.canvas = document.getElementById(canvasId);
@@ -338,7 +346,7 @@ class SkillsPentagon {
       
       const label = document.createElement('div');
       label.className = 'skill-label';
-      label.innerHTML = `${skill.name}<span class="skill-percentage">${skill.value}%</span>`;
+      label.innerHTML = `${skill.name}<span class="skill-percentage">${skillTier(skill.value)}</span>`;
       label.dataset.skillIndex = index;
       
       // Calculate offset based on label width
@@ -405,8 +413,9 @@ class SkillsPentagon {
       
       // Set content
       this.explanationBox.innerHTML = `
-        <div class="skill-explanation-title">${skill.name}</div>
+        <div class="skill-explanation-title">${skill.name} · ${skillTier(skill.value)}</div>
         <div>${skill.description}</div>
+        ${skill.evidence ? `<div class="skill-explanation-evidence">${skill.evidence}</div>` : ''}
       `;
       
       // Toggle visibility
